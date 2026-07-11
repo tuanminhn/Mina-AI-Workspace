@@ -2,8 +2,22 @@ import { getUsers } from "./data";
 import { normalizeText } from "./search";
 import type { User } from "./types";
 
+export type LeavePeriod = {
+  fromDate: string;
+  toDate: string;
+  workingDays: number;
+};
+
 export function detectToolIntent(question: string) {
   const text = normalizeText(question);
+  const isLeaveRequest = /(nghi phep|don nghi|ngay nghi)/.test(text);
+  const leaveAgentSignals = [
+    /(chinh sach|quy dinh)/.test(text),
+    /(so ngay|con bao nhieu|kiem tra.*ngay nghi)/.test(text),
+    /(quan ly|phe duyet|approver)/.test(text),
+    /(tao|lap).*(nhap|draft|don)/.test(text),
+  ].filter(Boolean).length;
+  if (isLeaveRequest && leaveAgentSignals >= 2) return "leave.agent";
   const asksForStaffCount =
     /(bao nhieu|tong so)/.test(text) &&
     /(nguoi|nhan vien|nhan su)/.test(text) &&
@@ -79,5 +93,82 @@ export function createLeaveDraft(user: User, question: string) {
     toDate: "2026-07-16",
     reason: question,
     currentApprover: "manager-demo",
+  };
+}
+
+function formatIsoDate(year: number, month: number, day: number) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function countWorkingDays(fromDate: string, toDate: string) {
+  const cursor = new Date(`${fromDate}T00:00:00Z`);
+  const end = new Date(`${toDate}T00:00:00Z`);
+  let count = 0;
+  while (cursor <= end) {
+    const weekday = cursor.getUTCDay();
+    if (weekday !== 0 && weekday !== 6) count += 1;
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return count;
+}
+
+export function parseLeavePeriod(question: string, now = new Date()): LeavePeriod | null {
+  const text = normalizeText(question);
+  const range = text.match(/(?:tu\s+)?(\d{1,2})\s*(?:den|toi|-)\s*(\d{1,2})\s*[\/]?\s*(\d{1,2})(?:\s*[\/]\s*(\d{4}))?/);
+  if (!range) return null;
+  const fromDay = Number(range[1]);
+  const toDay = Number(range[2]);
+  const month = Number(range[3]);
+  const year = range[4] ? Number(range[4]) : now.getFullYear();
+  const fromDate = formatIsoDate(year, month, fromDay);
+  const toDate = formatIsoDate(year, month, toDay);
+  const from = new Date(`${fromDate}T00:00:00Z`);
+  const to = new Date(`${toDate}T00:00:00Z`);
+  if (Number.isNaN(from.valueOf()) || Number.isNaN(to.valueOf()) || from > to) return null;
+  return { fromDate, toDate, workingDays: countWorkingDays(fromDate, toDate) };
+}
+
+export function leaveBalance(user: User) {
+  const numericId = Number(user.user_id.replace(/\D/g, "")) || 1;
+  const annualAllowance = 15;
+  const used = 3 + (numericId % 4);
+  return { annualAllowance, used, remaining: annualAllowance - used, unit: "working_day" };
+}
+
+const departmentApprovers: Record<string, { staffCode: string; staffName: string; title: string; email: string }> = {
+  Engineering: { staffCode: "MGR-ENG-01", staffName: "Nguyễn Minh Hoàng", title: "Engineering Manager", email: "hoang.nguyen@synthetic.local" },
+  Product: { staffCode: "MGR-PROD-01", staffName: "Lê Minh Châu", title: "Product Director", email: "user003@synthetic.local" },
+  Finance: { staffCode: "MGR-FIN-01", staffName: "Trần Thị Bình", title: "Finance Manager", email: "user002@synthetic.local" },
+  Operations: { staffCode: "MGR-OPS-01", staffName: "Hoàng Thu Hà", title: "Operations Manager", email: "user005@synthetic.local" },
+  "Human Resources": { staffCode: "MGR-HR-01", staffName: "Phạm Mai Phương", title: "HR Manager", email: "phuong.pham@synthetic.local" },
+};
+
+export function findLeaveApprover(user: User) {
+  return departmentApprovers[user.department] || {
+    staffCode: "MGR-COMPANY-01",
+    staffName: "Quản lý trực tiếp",
+    title: `${user.department} Manager`,
+    email: "manager@synthetic.local",
+  };
+}
+
+export function createAgentLeaveDraft(
+  user: User,
+  question: string,
+  period: LeavePeriod,
+  approver: ReturnType<typeof findLeaveApprover>,
+) {
+  return {
+    id: `LR-${Date.now().toString().slice(-8)}`,
+    requestType: "ANNUAL_LEAVE",
+    status: "DRAFT",
+    staffId: user.user_id,
+    staffName: user.full_name,
+    fromDate: period.fromDate,
+    toDate: period.toDate,
+    workingDays: period.workingDays,
+    reason: question,
+    currentApprover: approver,
+    submitted: false,
   };
 }

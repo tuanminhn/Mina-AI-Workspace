@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
-import { citationsFromHits, composeAnswer } from "@/lib/answer";
+import { citationsFromHits, composeAnswer, composeLeaveAgentAnswer } from "@/lib/answer";
 import { appendAuditLog, getUser } from "@/lib/data";
 import { searchKnowledge } from "@/lib/search";
-import { attendanceByStaff, createLeaveDraft, detectToolIntent, staffCount, staffSearch } from "@/lib/tools";
+import {
+  attendanceByStaff,
+  createAgentLeaveDraft,
+  createLeaveDraft,
+  detectToolIntent,
+  findLeaveApprover,
+  leaveBalance,
+  parseLeavePeriod,
+  staffCount,
+  staffSearch,
+} from "@/lib/tools";
 
 export async function POST(request: Request) {
   const startedAt = Date.now();
@@ -17,7 +27,9 @@ export async function POST(request: Request) {
   const toolIntent = detectToolIntent(question);
   let toolResult = null;
   let answer = "";
-  const retrieved = toolIntent ? [] : searchKnowledge(question, user, 8);
+  const retrieved = toolIntent === "leave.agent"
+    ? searchKnowledge("chính sách nghỉ phép số ngày nghỉ phép năm", user, 8)
+    : toolIntent ? [] : searchKnowledge(question, user, 8);
   const authorized = retrieved.filter((hit) => hit.allowed);
   let answerSources = authorized;
   const topHit = retrieved[0];
@@ -32,7 +44,54 @@ export async function POST(request: Request) {
       (!bestAllowed || topHit.score > bestAllowed.score),
   );
 
-  if (toolIntent === "staff.count") {
+  if (toolIntent === "leave.agent") {
+    const period = parseLeavePeriod(question);
+    const balance = leaveBalance(user);
+    const approver = findLeaveApprover(user);
+    const policyHit = authorized.find((hit) => hit.document_id === "DOC002");
+    if (!period) {
+      answerSources = policyHit ? [policyHit] : [];
+      toolResult = {
+        name: toolIntent,
+        status: "needs_input",
+        steps: [{ name: "parse.leave_period", status: "needs_input", summary: "Chưa xác định được khoảng ngày nghỉ." }],
+      };
+      answer = "Em chưa xác định được khoảng ngày nghỉ. Anh nhập theo mẫu: “Tôi muốn nghỉ từ 15 đến 17/7”.";
+    } else if (!policyHit) {
+      answerSources = [];
+      toolResult = {
+        name: toolIntent,
+        status: "blocked",
+        steps: [{ name: "knowledge.search_policy", status: "blocked", summary: "Không có quyền đọc chính sách nghỉ phép." }],
+      };
+      answer = "Em không thể tiếp tục tạo nháp vì chưa tìm được chính sách nghỉ phép mà user này được cấp quyền truy cập.";
+    } else {
+      const eligible = period.workingDays > 0 && period.workingDays <= balance.remaining;
+      const draft = eligible ? createAgentLeaveDraft(user, question, period, approver) : null;
+      const fallbackAnswer = eligible
+        ? `Đã hoàn tất luồng nghỉ phép:\n1. Chính sách: nhân viên chính thức có 15 ngày nghỉ phép năm có lương sau thử việc [DOC002].\n2. Khoảng nghỉ ${period.fromDate} đến ${period.toDate} gồm ${period.workingDays} ngày làm việc. Số dư hiện tại: ${balance.remaining}/${balance.annualAllowance} ngày.\n3. Người phê duyệt: ${approver.staffName} — ${approver.title}.\n4. Đã tạo nháp ${draft?.id}, trạng thái DRAFT. Nháp chưa được gửi để phê duyệt.`
+        : `Không thể tạo nháp: yêu cầu ${period.workingDays} ngày làm việc nhưng số dư chỉ còn ${balance.remaining} ngày.`;
+      const agentResult = {
+        name: toolIntent,
+        status: eligible ? "completed" : "blocked",
+        period,
+        balance,
+        approver,
+        draft,
+        fallbackAnswer,
+        steps: [
+          { name: "knowledge.search_policy", status: "completed", summary: `Đã đọc DOC002 theo ACL: ${policyHit.reason}` },
+          { name: "leave.calculate_days", status: "completed", summary: `${period.workingDays} ngày làm việc (${period.fromDate} → ${period.toDate}).` },
+          { name: "leave.check_balance", status: eligible ? "completed" : "blocked", summary: `Còn ${balance.remaining}/${balance.annualAllowance} ngày phép.` },
+          { name: "staff.find_manager", status: "completed", summary: `${approver.staffName} — ${approver.title}.` },
+          { name: "request.create_draft", status: eligible ? "completed" : "skipped", summary: draft ? `Đã tạo ${draft.id}; chưa gửi.` : "Không tạo do không đủ số dư." },
+        ],
+      };
+      answerSources = [policyHit];
+      toolResult = agentResult;
+      answer = await composeLeaveAgentAnswer(question, user, [policyHit], agentResult);
+    }
+  } else if (toolIntent === "staff.count") {
     const result = staffCount();
     answerSources = [];
     toolResult = { name: toolIntent, body: result };

@@ -13,6 +13,7 @@ export async function GET() {
     "Dự báo doanh thu năm 2026 tăng bao nhiêu?",
     "Hôm nay tôi có check-in chưa?",
     "Tạo draft nghỉ phép 3 ngày tuần sau.",
+    "Tôi muốn nghỉ từ 15 đến 17/7. Kiểm tra chính sách, số ngày nghỉ, tìm quản lý phê duyệt và tạo nháp đơn.",
   ];
 
   return NextResponse.json({

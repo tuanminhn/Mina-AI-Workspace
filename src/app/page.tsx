@@ -43,6 +43,18 @@ type Retrieved = {
   reason: string;
 };
 
+type AgentStep = {
+  name: string;
+  status: "completed" | "blocked" | "skipped" | "needs_input";
+  summary: string;
+};
+
+type AgentToolResult = {
+  name?: string;
+  status?: string;
+  steps?: AgentStep[];
+};
+
 type Message = {
   id: string;
   role: "user" | "assistant";
@@ -83,6 +95,7 @@ export default function Home() {
   );
 
   const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+  const latestAgentResult = latestAssistant?.toolResult as AgentToolResult | undefined;
 
   useEffect(() => {
     fetch("/api/bootstrap")
@@ -296,6 +309,36 @@ export default function Home() {
           </section>
 
           <aside className="flex flex-col gap-4 lg:min-h-0 lg:overflow-y-auto lg:pl-1">
+            <Panel
+              title="Agent Trace"
+              icon={<Bot className="h-4 w-4" />}
+              description="Các bước Mina đã thực thi cho yêu cầu nhiều tác vụ. Tool nghiệp vụ tạo nháp nhưng không tự gửi đơn."
+            >
+              <div className="space-y-2">
+                {latestAgentResult?.name === "leave.agent" && latestAgentResult.steps?.length ? (
+                  latestAgentResult.steps.map((step, index) => (
+                    <div key={`${step.name}-${index}`} className="rounded-md border border-slate-200 bg-white p-3 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-slate-700">{index + 1}. {step.name}</span>
+                        <span className={`rounded px-2 py-1 font-semibold ${
+                          step.status === "completed"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : step.status === "blocked"
+                              ? "bg-rose-50 text-rose-700"
+                              : "bg-amber-50 text-amber-700"
+                        }`}>
+                          {step.status}
+                        </span>
+                      </div>
+                      <div className="mt-2 leading-5 text-slate-500">{step.summary}</div>
+                    </div>
+                  ))
+                ) : (
+                  <Empty text="Trace sẽ xuất hiện khi chạy yêu cầu nghỉ phép nhiều bước." />
+                )}
+              </div>
+            </Panel>
+
             <Panel
               title="Citations"
               icon={<ClipboardCheck className="h-4 w-4" />}

@@ -58,3 +58,32 @@ export async function composeAnswer(question: string, user: User, hits: SearchHi
 
   return response.choices[0]?.message.content || fallbackAnswer(question, hits);
 }
+
+export async function composeLeaveAgentAnswer(
+  question: string,
+  user: User,
+  hits: SearchHit[],
+  result: Record<string, unknown>,
+) {
+  const fallback = String(result.fallbackAnswer || "Đã hoàn tất luồng xử lý nghỉ phép.");
+  if (!process.env.OPENAI_API_KEY) return fallback;
+
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const policyContext = hits.slice(0, 3).map((hit) => `[${hit.document_id}] ${hit.content}`).join("\n\n");
+  const response = await client.chat.completions.create({
+    model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+    temperature: 0.2,
+    messages: [
+      {
+        role: "system",
+        content:
+          "Bạn là Mina Leave Agent. Hãy báo cáo ngắn gọn bằng tiếng Việt theo 4 bước: chính sách, số ngày/số dư, người phê duyệt, nháp đơn. Chỉ dùng dữ liệu tool và policy context được cung cấp. Nêu rõ nháp chưa được gửi. Không tự thêm dữ liệu.",
+      },
+      {
+        role: "user",
+        content: `User: ${user.full_name}\nYêu cầu: ${question}\n\nPolicy context:\n${policyContext}\n\nTool results:\n${JSON.stringify(result)}`,
+      },
+    ],
+  });
+  return response.choices[0]?.message.content || fallback;
+}
