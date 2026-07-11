@@ -32,6 +32,12 @@ export function getUser(userId: string) {
 
 export function appendAuditLog(entry: unknown) {
   const filePath = path.join(dataDir, "audit_logs.jsonl");
-  fs.mkdirSync(dataDir, { recursive: true });
-  fs.appendFileSync(filePath, `${JSON.stringify(entry)}\n`);
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.appendFileSync(filePath, `${JSON.stringify(entry)}\n`);
+  } catch (error) {
+    // Serverless filesystems are read-only. Keep the audit event in provider logs
+    // until a durable audit store is connected.
+    console.info("audit_event", entry, error);
+  }
 }
