@@ -11,6 +11,7 @@ import {
   Send,
   ShieldCheck,
   UserRound,
+  X,
   XCircle,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -55,6 +56,24 @@ type AgentToolResult = {
   name?: string;
   status?: string;
   steps?: AgentStep[];
+  draft?: LeaveDraft | null;
+};
+
+type LeaveDraft = {
+  id: string;
+  status: string;
+  staffId: string;
+  staffName: string;
+  fromDate: string;
+  toDate: string;
+  workingDays: number;
+  reason: string;
+  submitted: boolean;
+  currentApprover: {
+    staffName: string;
+    title: string;
+    email: string;
+  };
 };
 
 type DemoQuestion = {
@@ -95,6 +114,9 @@ export default function Home() {
     },
   ]);
   const [loading, setLoading] = useState(false);
+  const [openedDraft, setOpenedDraft] = useState<LeaveDraft | null>(null);
+  const [draftOverrides, setDraftOverrides] = useState<Record<string, LeaveDraft>>({});
+  const [showSubmissionNotice, setShowSubmissionNotice] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const selectedUser = useMemo(
@@ -197,38 +219,6 @@ export default function Home() {
 
         <section className="grid flex-1 gap-4 lg:min-h-0 lg:grid-cols-[300px_minmax(0,1fr)_360px]">
           <aside className="flex flex-col gap-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
-            <Panel title="Demo User" icon={<UserRound className="h-4 w-4" />}>
-              <label className="text-xs font-semibold uppercase text-slate-500" htmlFor="user">
-                Acting as
-              </label>
-              <select
-                id="user"
-                value={selectedUserId}
-                onChange={(event) => setSelectedUserId(event.target.value)}
-                className="mt-2 w-full rounded-md border border-slate-250 bg-white px-3 py-2 text-sm outline-none ring-[#8bb6f0] focus:ring-2"
-              >
-                {users.map((user) => (
-                  <option key={user.user_id} value={user.user_id}>
-                    {user.user_id} - {user.full_name} - {user.role} - {user.department}
-                  </option>
-                ))}
-              </select>
-              {selectedUser && (
-                <div className="mt-3 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-                  <div className="font-semibold">{selectedUser.full_name}</div>
-                  <div className="text-slate-600">{selectedUser.email}</div>
-                  <div className="flex flex-wrap gap-2">
-                    <span className={`rounded border px-2 py-1 text-xs ${roleTone[selectedUser.role] || roleTone.Employee}`}>
-                      {selectedUser.role}
-                    </span>
-                    <span className="rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700">
-                      {selectedUser.department}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </Panel>
-
             <Panel title="Fast Scenarios" icon={<Search className="h-4 w-4" />}>
               <div className="flex flex-col gap-2">
                 {demoQuestions.map((item) => (
@@ -270,7 +260,9 @@ export default function Home() {
             </div>
 
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#fbfcfe] p-4">
-              {messages.map((message) => (
+              {messages.map((message) => {
+                const draft = getLeaveDraft(message.toolResult);
+                return (
                 <div
                   key={message.id}
                   className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
@@ -283,6 +275,15 @@ export default function Home() {
                     }`}
                   >
                     <div className="whitespace-pre-wrap">{message.content}</div>
+                    {draft && (
+                      <button
+                        type="button"
+                        onClick={() => setOpenedDraft(draftOverrides[draft.id] || draft)}
+                        className="mt-3 inline-flex items-center text-sm font-semibold text-[#1f5fbf] underline decoration-[#8bb6f0] underline-offset-4 transition hover:text-[#174c9c]"
+                      >
+                        Xem đơn nháp đã tạo
+                      </button>
+                    )}
                     {message.intent && (
                       <div className="mt-3 flex flex-wrap gap-2 text-xs">
                         <span className="rounded bg-slate-100 px-2 py-1 text-slate-600">
@@ -295,7 +296,8 @@ export default function Home() {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
               {loading && (
                 <div className="flex items-center gap-2 text-sm text-slate-500">
                   <Bot className="h-4 w-4 animate-pulse" />
@@ -335,11 +337,46 @@ export default function Home() {
 
           <aside className="flex flex-col gap-4 lg:min-h-0 lg:overflow-y-auto lg:pl-1">
             <Panel
+              title="Acting as"
+              icon={<UserRound className="h-4 w-4" />}
+              className="order-1"
+              description="Danh sách user hiện được fix cứng từ fake API để phục vụ demo phân quyền. Hệ thống chưa đấu nối với danh bạ nhân sự hoặc môi trường thật."
+            >
+              <select
+                id="user"
+                value={selectedUserId}
+                onChange={(event) => setSelectedUserId(event.target.value)}
+                className="w-full rounded-md border border-slate-250 bg-white px-3 py-2 text-sm outline-none ring-[#8bb6f0] focus:ring-2"
+              >
+                {users.map((user) => (
+                  <option key={user.user_id} value={user.user_id}>
+                    {user.user_id} - {user.full_name} - {user.role} - {user.department}
+                  </option>
+                ))}
+              </select>
+              {selectedUser && (
+                <div className="mt-3 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <div className="font-semibold">{selectedUser.full_name}</div>
+                  <div className="text-slate-600">{selectedUser.email}</div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className={`rounded border px-2 py-1 text-xs ${roleTone[selectedUser.role] || roleTone.Employee}`}>
+                      {selectedUser.role}
+                    </span>
+                    <span className="rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700">
+                      {selectedUser.department}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </Panel>
+
+            <Panel
               title="Agent Trace"
               icon={<Bot className="h-4 w-4" />}
               description="Các bước Mina đã thực thi cho yêu cầu nhiều tác vụ. Tool nghiệp vụ tạo nháp nhưng không tự gửi đơn."
               defaultCollapsed
-              className="order-3"
+              className="order-2"
+              expandedSignal={latestAgentResult?.name === "leave.agent" ? latestAssistant?.id : undefined}
             >
               <div className="space-y-2">
                 {latestAgentResult?.name === "leave.agent" && latestAgentResult.steps?.length ? (
@@ -370,7 +407,7 @@ export default function Home() {
               title="Citations"
               icon={<ClipboardCheck className="h-4 w-4" />}
               defaultCollapsed
-              className="order-2"
+              className="order-4"
               description={
                 <>
                   <p>
@@ -408,7 +445,7 @@ export default function Home() {
               title="ACL Trace"
               icon={<ShieldCheck className="h-4 w-4" />}
               defaultCollapsed
-              className="order-1"
+              className="order-3"
               description={
                 <>
                   <p>
@@ -456,7 +493,105 @@ export default function Home() {
           </aside>
         </section>
       </div>
+      {openedDraft && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="leave-draft-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOpenedDraft(null);
+          }}
+        >
+          <section className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-[#315f9a]">My Tasco · Leave request</div>
+                <h2 id="leave-draft-title" className="mt-1 text-xl font-semibold text-[#13253d]">Đơn nghỉ phép {openedDraft.id}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenedDraft(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Đóng đơn nháp"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <dl className="mt-4 divide-y divide-slate-100 text-sm">
+              <DraftRow label="Trạng thái" value={openedDraft.submitted ? openedDraft.status : `${openedDraft.status} · Chưa gửi`} />
+              <DraftRow label="Nhân viên" value={`${openedDraft.staffName} (${openedDraft.staffId})`} />
+              <DraftRow label="Thời gian nghỉ" value={`${formatDisplayDate(openedDraft.fromDate)} – ${formatDisplayDate(openedDraft.toDate)}`} />
+              <DraftRow label="Số ngày làm việc" value={`${openedDraft.workingDays} ngày`} />
+              <DraftRow label="Người phê duyệt" value={`${openedDraft.currentApprover.staffName} · ${openedDraft.currentApprover.title}`} />
+              <DraftRow label="Email phê duyệt" value={openedDraft.currentApprover.email} />
+            </dl>
+            <div className="mt-4 text-sm">
+              <label htmlFor="leave-request-reason" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Nội dung yêu cầu
+              </label>
+              <textarea
+                id="leave-request-reason"
+                value={openedDraft.reason}
+                onChange={(event) => setOpenedDraft((current) => current ? { ...current, reason: event.target.value } : current)}
+                disabled={openedDraft.submitted}
+                className="mt-2 min-h-28 w-full resize-y rounded-md border border-slate-250 bg-white px-3 py-2 leading-6 text-slate-700 outline-none ring-[#8bb6f0] focus:ring-2 disabled:bg-slate-100 disabled:text-slate-500"
+              />
+            </div>
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                disabled={openedDraft.submitted || !openedDraft.reason.trim()}
+                onClick={() => {
+                  const submittedDraft = { ...openedDraft, submitted: true, status: "SUBMITTED" };
+                  setOpenedDraft(submittedDraft);
+                  setDraftOverrides((current) => ({ ...current, [submittedDraft.id]: submittedDraft }));
+                  setShowSubmissionNotice(true);
+                }}
+                className="rounded-md bg-[#1f5fbf] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#174c9c] disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {openedDraft.submitted ? "Đã gửi" : "Gửi yêu cầu"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {showSubmissionNotice && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/25 p-4" role="alertdialog" aria-modal="true">
+          <section className="w-full max-w-sm rounded-xl border border-emerald-200 bg-white p-5 text-center shadow-2xl">
+            <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" />
+            <h2 className="mt-3 text-lg font-semibold text-[#13253d]">Đã gửi yêu cầu lên hệ thống</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Đơn nghỉ phép đã được chuyển tới người phê duyệt.</p>
+            <button
+              type="button"
+              onClick={() => setShowSubmissionNotice(false)}
+              className="mt-4 rounded-md bg-[#1f5fbf] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#174c9c]"
+            >
+              Xác nhận
+            </button>
+          </section>
+        </div>
+      )}
     </main>
+  );
+}
+
+function getLeaveDraft(toolResult: unknown) {
+  if (!toolResult || typeof toolResult !== "object") return null;
+  const result = toolResult as AgentToolResult;
+  return result.name === "leave.agent" && result.draft ? result.draft : null;
+}
+
+function formatDisplayDate(value: string) {
+  return new Intl.DateTimeFormat("vi-VN").format(new Date(`${value}T00:00:00Z`));
+}
+
+function DraftRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[140px_1fr] gap-4 py-3">
+      <dt className="text-slate-500">{label}</dt>
+      <dd className="text-right font-medium text-[#13253d]">{value}</dd>
+    </div>
   );
 }
 
@@ -475,6 +610,7 @@ function Panel({
   description,
   defaultCollapsed = false,
   className = "",
+  expandedSignal,
   children,
 }: {
   title: string;
@@ -482,10 +618,15 @@ function Panel({
   description?: React.ReactNode;
   defaultCollapsed?: boolean;
   className?: string;
+  expandedSignal?: unknown;
   children: React.ReactNode;
 }) {
   const [showDescription, setShowDescription] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+
+  useEffect(() => {
+    if (expandedSignal) setIsCollapsed(false);
+  }, [expandedSignal]);
 
   return (
     <section className={`rounded-lg border border-slate-200 bg-white p-4 shadow-sm ${className}`}>
