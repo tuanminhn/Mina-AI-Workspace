@@ -3,6 +3,7 @@
 import {
   Bot,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   Info,
   MessageSquareText,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import { APP_VERSION } from "@/lib/version";
 
 type User = {
   user_id: string;
@@ -55,6 +57,12 @@ type AgentToolResult = {
   steps?: AgentStep[];
 };
 
+type DemoQuestion = {
+  text: string;
+  badge?: string;
+  description?: string;
+};
+
 type Message = {
   id: string;
   role: "user" | "assistant";
@@ -75,7 +83,7 @@ const roleTone: Record<string, string> = {
 
 export default function Home() {
   const [users, setUsers] = useState<User[]>([]);
-  const [demoQuestions, setDemoQuestions] = useState<string[]>([]);
+  const [demoQuestions, setDemoQuestions] = useState<DemoQuestion[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("U001");
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Message[]>([
@@ -177,6 +185,7 @@ export default function Home() {
             <div className="absolute right-0 z-30 mt-2 w-72 rounded-md border border-slate-200 bg-white p-3 shadow-lg">
               <div className="mb-2 text-sm font-semibold text-[#13253d]">Thông tin hệ thống</div>
               <dl className="divide-y divide-slate-100 text-sm">
+                <InfoRow label="Version" value={APP_VERSION} />
                 <InfoRow label="Documents" value="40" />
                 <InfoRow label="Demo users" value="32" />
                 <InfoRow label="Access rules" value="RBAC + ABAC" />
@@ -224,12 +233,28 @@ export default function Home() {
               <div className="flex flex-col gap-2">
                 {demoQuestions.map((item) => (
                   <button
-                    key={item}
+                    key={item.text}
                     type="button"
-                    onClick={() => ask(item)}
+                    onClick={() => ask(item.text)}
                     className="rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 transition hover:border-[#75a9eb] hover:bg-[#edf5ff]"
                   >
-                    {item}
+                    {item.badge && (
+                      <span className="mb-1.5 flex justify-end">
+                        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                          item.badge === "AI Agent"
+                            ? "bg-violet-100 text-violet-700"
+                            : "bg-slate-100 text-slate-600"
+                        }`}>
+                          {item.badge}
+                        </span>
+                      </span>
+                    )}
+                    <span className="block w-full">
+                      {item.text}
+                    </span>
+                    {item.description && (
+                      <span className="mt-1.5 block text-xs leading-4 text-violet-600">{item.description}</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -313,6 +338,8 @@ export default function Home() {
               title="Agent Trace"
               icon={<Bot className="h-4 w-4" />}
               description="Các bước Mina đã thực thi cho yêu cầu nhiều tác vụ. Tool nghiệp vụ tạo nháp nhưng không tự gửi đơn."
+              defaultCollapsed
+              className="order-3"
             >
               <div className="space-y-2">
                 {latestAgentResult?.name === "leave.agent" && latestAgentResult.steps?.length ? (
@@ -342,6 +369,8 @@ export default function Home() {
             <Panel
               title="Citations"
               icon={<ClipboardCheck className="h-4 w-4" />}
+              defaultCollapsed
+              className="order-2"
               description={
                 <>
                   <p>
@@ -378,6 +407,8 @@ export default function Home() {
             <Panel
               title="ACL Trace"
               icon={<ShieldCheck className="h-4 w-4" />}
+              defaultCollapsed
+              className="order-1"
               description={
                 <>
                   <p>
@@ -442,26 +473,34 @@ function Panel({
   title,
   icon,
   description,
+  defaultCollapsed = false,
+  className = "",
   children,
 }: {
   title: string;
   icon: React.ReactNode;
   description?: React.ReactNode;
+  defaultCollapsed?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   const [showDescription, setShowDescription] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3">
-        <div className="flex items-center gap-2 font-semibold text-[#13253d]">
-          <span className="text-[#315f9a]">{icon}</span>
-          {title}
-          {description && (
+    <section className={`rounded-lg border border-slate-200 bg-white p-4 shadow-sm ${className}`}>
+      <div className={isCollapsed ? "" : "mb-3"}>
+        <div className="relative flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 font-semibold text-[#13253d]">
+            <span className="text-[#315f9a]">{icon}</span>
+            {title}
+          </div>
+          <div className="flex items-center gap-1">
+            {description && (
             <button
               type="button"
               onClick={() => setShowDescription((current) => !current)}
-              className="ml-0.5 flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-[#315f9a] focus:outline-none focus:ring-2 focus:ring-[#8bb6f0]"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-[#315f9a] focus:outline-none focus:ring-2 focus:ring-[#8bb6f0]"
               aria-label={`${showDescription ? "Đóng" : "Mở"} giải thích ${title}`}
               aria-expanded={showDescription}
               title={`Giải thích ${title}`}
@@ -469,14 +508,25 @@ function Panel({
               <Info className="h-4 w-4" />
             </button>
           )}
-        </div>
-        {description && showDescription && (
-          <div className="mt-3 w-full rounded-md border border-[#cbdcf3] bg-[#f4f8fd] p-3 text-xs font-normal leading-5 text-slate-600">
-            {description}
+            <button
+              type="button"
+              onClick={() => setIsCollapsed((current) => !current)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-[#315f9a] transition hover:bg-[#edf5ff] focus:outline-none focus:ring-2 focus:ring-[#8bb6f0]"
+              aria-label={`${isCollapsed ? "Mở rộng" : "Thu gọn"} ${title}`}
+              aria-expanded={!isCollapsed}
+              title={isCollapsed ? "Mở rộng" : "Thu gọn"}
+            >
+              <ChevronDown className={`h-4 w-4 transition-transform ${isCollapsed ? "" : "rotate-180"}`} />
+            </button>
+            {description && showDescription && (
+              <div className="absolute right-0 top-9 z-40 w-72 rounded-md border border-[#cbdcf3] bg-white p-3 text-xs font-normal leading-5 text-slate-600 shadow-xl">
+                {description}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
-      {children}
+      {!isCollapsed && children}
     </section>
   );
 }
