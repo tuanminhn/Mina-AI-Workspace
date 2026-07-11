@@ -1,0 +1,50 @@
+[
+  {
+    "department_id": "COMP",
+    "department_en": "Company",
+    "department_vi": "Công ty",
+    "knowledge_space": "Company Knowledge"
+  },
+  {
+    "department_id": "HR",
+    "department_en": "Human Resources",
+    "department_vi": "Nhân sự",
+    "knowledge_space": "Department Knowledge"
+  },
+  {
+    "department_id": "FIN",
+    "department_en": "Finance",
+    "department_vi": "Tài chính",
+    "knowledge_space": "Department Knowledge"
+  },
+  {
+    "department_id": "PROD",
+    "department_en": "Product",
+    "department_vi": "Sản phẩm",
+    "knowledge_space": "Department Knowledge"
+  },
+  {
+    "department_id": "ENG",
+    "department_en": "Engineering",
+    "department_vi": "Kỹ thuật",
+    "knowledge_space": "Department Knowledge"
+  },
+  {
+    "department_id": "OPS",
+    "department_en": "Operations",
+    "department_vi": "Vận hành",
+    "knowledge_space": "Department Knowledge"
+  },
+  {
+    "department_id": "LEGAL",
+    "department_en": "Legal & Compliance",
+    "department_vi": "Pháp chế & Tuân thủ",
+    "knowledge_space": "Department Knowledge"
+  },
+  {
+    "department_id": "EXEC",
+    "department_en": "Executive Office",
+    "department_vi": "Ban Điều hành",
+    "knowledge_space": "Executive Knowledge"
+  }
+]

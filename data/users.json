@@ -1,0 +1,258 @@
+[
+  {
+    "user_id": "U001",
+    "full_name": "Nguyễn Văn An",
+    "department": "Human Resources",
+    "role": "Employee",
+    "email": "user001@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U002",
+    "full_name": "Trần Thị Bình",
+    "department": "Finance",
+    "role": "Manager",
+    "email": "user002@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U003",
+    "full_name": "Lê Minh Châu",
+    "department": "Product",
+    "role": "Director",
+    "email": "user003@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U004",
+    "full_name": "Phạm Quốc Dũng",
+    "department": "Engineering",
+    "role": "Employee",
+    "email": "user004@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U005",
+    "full_name": "Hoàng Thu Hà",
+    "department": "Operations",
+    "role": "Manager",
+    "email": "user005@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U006",
+    "full_name": "Đỗ Anh Khoa",
+    "department": "Legal & Compliance",
+    "role": "Director",
+    "email": "user006@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U007",
+    "full_name": "Vũ Thị Lan",
+    "department": "Executive Office",
+    "role": "Executive",
+    "email": "user007@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U008",
+    "full_name": "Bùi Đức Minh",
+    "department": "Company",
+    "role": "Employee",
+    "email": "user008@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U009",
+    "full_name": "Đặng Thanh Nga",
+    "department": "Human Resources",
+    "role": "Employee",
+    "email": "user009@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U010",
+    "full_name": "Phan Hải Nam",
+    "department": "Finance",
+    "role": "Manager",
+    "email": "user010@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U011",
+    "full_name": "Mai Phương Linh",
+    "department": "Product",
+    "role": "Director",
+    "email": "user011@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U012",
+    "full_name": "Tạ Quang Huy",
+    "department": "Engineering",
+    "role": "Employee",
+    "email": "user012@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U013",
+    "full_name": "Ngô Thùy Dương",
+    "department": "Operations",
+    "role": "Manager",
+    "email": "user013@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U014",
+    "full_name": "Cao Việt Long",
+    "department": "Legal & Compliance",
+    "role": "Director",
+    "email": "user014@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U015",
+    "full_name": "Lý Hồng Nhung",
+    "department": "Executive Office",
+    "role": "Executive",
+    "email": "user015@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U016",
+    "full_name": "Trương Gia Bảo",
+    "department": "Company",
+    "role": "Employee",
+    "email": "user016@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U017",
+    "full_name": "Đinh Mai Anh",
+    "department": "Human Resources",
+    "role": "Employee",
+    "email": "user017@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U018",
+    "full_name": "Hồ Quốc Khánh",
+    "department": "Finance",
+    "role": "Manager",
+    "email": "user018@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U019",
+    "full_name": "Chu Thanh Tâm",
+    "department": "Product",
+    "role": "Director",
+    "email": "user019@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U020",
+    "full_name": "Võ Minh Đức",
+    "department": "Engineering",
+    "role": "Employee",
+    "email": "user020@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U021",
+    "full_name": "Lâm Hương Giang",
+    "department": "Operations",
+    "role": "Manager",
+    "email": "user021@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U022",
+    "full_name": "Tô Nhật Quang",
+    "department": "Legal & Compliance",
+    "role": "Director",
+    "email": "user022@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U023",
+    "full_name": "Đào Mỹ Linh",
+    "department": "Executive Office",
+    "role": "Executive",
+    "email": "user023@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U024",
+    "full_name": "Nguyễn Hoàng Phúc",
+    "department": "Company",
+    "role": "Employee",
+    "email": "user024@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U025",
+    "full_name": "Trần Hải Yến",
+    "department": "Human Resources",
+    "role": "Employee",
+    "email": "user025@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U026",
+    "full_name": "Lê Tuấn Anh",
+    "department": "Finance",
+    "role": "Manager",
+    "email": "user026@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U027",
+    "full_name": "Phạm Ngọc Mai",
+    "department": "Product",
+    "role": "Director",
+    "email": "user027@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U028",
+    "full_name": "Vũ Đức Thắng",
+    "department": "Engineering",
+    "role": "Employee",
+    "email": "user028@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U029",
+    "full_name": "Bùi Kim Ngân",
+    "department": "Operations",
+    "role": "Manager",
+    "email": "user029@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U030",
+    "full_name": "Đặng Minh Trí",
+    "department": "Legal & Compliance",
+    "role": "Director",
+    "email": "user030@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U031",
+    "full_name": "Hoàng Bảo Ngọc",
+    "department": "Executive Office",
+    "role": "Executive",
+    "email": "user031@synthetic.local",
+    "status": "Active"
+  },
+  {
+    "user_id": "U032",
+    "full_name": "Phan Quốc Việt",
+    "department": "Company",
+    "role": "Employee",
+    "email": "user032@synthetic.local",
+    "status": "Active"
+  }
+]

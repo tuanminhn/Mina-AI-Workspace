@@ -1,0 +1,34 @@
+[
+  {
+    "classification": "Public",
+    "employee": "Allow",
+    "manager": "Allow",
+    "director": "Allow",
+    "executive": "Allow",
+    "rule_description_vi": "Tất cả người dùng trong hệ thống đều được truy cập"
+  },
+  {
+    "classification": "Internal",
+    "employee": "Allow",
+    "manager": "Allow",
+    "director": "Allow",
+    "executive": "Allow",
+    "rule_description_vi": "Tất cả nhân viên nội bộ được truy cập, không giới hạn theo phòng ban."
+  },
+  {
+    "classification": "Confidential",
+    "employee": "Own Department",
+    "manager": "Own Department",
+    "director": "Own Department",
+    "executive": "Allow",
+    "rule_description_vi": "Chỉ người dùng thuộc phòng ban sở hữu tài liệu được truy cập; Ban Điều hành (Executive) được truy cập tất cả."
+  },
+  {
+    "classification": "Restricted",
+    "employee": "Deny",
+    "manager": "Deny",
+    "director": "Deny",
+    "executive": "Allow",
+    "rule_description_vi": "Chỉ Ban Điều hành (Executive) được truy cập. Các vai trò khác không được phép truy cập."
+  }
+]

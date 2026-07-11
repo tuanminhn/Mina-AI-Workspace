@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mina Workspace MVP
 
-## Getting Started
+Secure enterprise knowledge and My Tasco operations AI demo for the AI Workspace problem statement.
 
-First, run the development server:
+## What This MVP Demonstrates
+
+- Vietnamese enterprise knowledge search over the provided Excel dataset.
+- RBAC/ABAC filtering before answer generation.
+- Grounded answers with document citations and ACL trace.
+- User switcher for Employee, Manager, Director, and Executive scenarios.
+- Mock My Tasco tool calling for staff search, attendance, and leave request draft.
+- Evaluation runner for 10 public test cases.
+
+## Setup
 
 ```bash
+npm install
+npm run ingest
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Optional LLM answer generation:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+cp .env.example .env.local
+# Add OPENAI_API_KEY=...
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Without `OPENAI_API_KEY`, the app still runs with extractive answers from authorized chunks.
 
-## Learn More
+## Demo Flow
 
-To learn more about Next.js, take a look at the following resources:
+1. Select `U004 - Phạm Quốc Dũng`, Engineering Employee.
+2. Ask `Cho tôi xem lộ trình sản phẩm quý 2.`.
+3. Mina should deny access to Product Confidential knowledge.
+4. Switch to a Product user or Executive and ask again.
+5. Inspect Citations and ACL Trace panels.
+6. Ask `Hôm nay tôi có check-in chưa?` to trigger Attendance mock tool.
+7. Ask `Tạo draft nghỉ phép 3 ngày tuần sau.` to trigger request draft.
+8. Run Evaluation to show pass/fail cases.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Access Rules
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Classification | Rule |
+| --- | --- |
+| Public | Allow all users |
+| Internal | Allow all internal employees |
+| Confidential | Allow same department or Executive |
+| Restricted | Allow Executive only |
 
-## Deploy on Vercel
+## Key Files
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `scripts/ingest.mjs`: reads the Excel dataset and creates JSON data.
+- `src/lib/acl.ts`: authorization decision logic.
+- `src/lib/search.ts`: local hybrid search over chunks.
+- `src/lib/answer.ts`: OpenAI composer with local fallback.
+- `src/lib/tools.ts`: My Tasco mock tool adapters.
+- `src/app/api/chat/route.ts`: main ask/answer endpoint.
+- `src/app/page.tsx`: one-screen demo UI.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Mock API Examples
+
+```bash
+curl -X POST http://localhost:3000/api/mytasco/staff/search \
+  -H "Content-Type: application/json" \
+  -d '{"example":{"keyword":"Nguyễn"},"pageInfo":{"pageSize":5,"currentPage":0}}'
+```
+
+```bash
+curl "http://localhost:3000/api/mytasco/attendance/by-staff?userId=U004"
+```
