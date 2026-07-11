@@ -518,7 +518,6 @@ export default function Home() {
               </select>
               {selectedUser && (
                 <div className="mt-3 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-                  <div className="font-semibold">{selectedUser.full_name}</div>
                   <div className="text-slate-600">{selectedUser.email}</div>
                   <div className="flex flex-wrap gap-2">
                     <span className={`rounded border px-2 py-1 text-xs ${roleTone[selectedUser.role] || roleTone.Employee}`}>
