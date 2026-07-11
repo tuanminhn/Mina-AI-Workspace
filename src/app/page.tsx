@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Activity,
   Bot,
   CheckCircle2,
   ChevronDown,
@@ -14,6 +15,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import LangfuseTracing from "@/components/langfuse-tracing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { APP_VERSION } from "@/lib/version";
@@ -56,7 +58,11 @@ type AgentToolResult = {
   name?: string;
   status?: string;
   steps?: AgentStep[];
+  plan?: string[];
+  decisions?: Array<{ label: string; summary: string }>;
+  approval?: { status: string; summary: string; nextAction: string };
   draft?: LeaveDraft | null;
+  travelDrafts?: TravelDraftBundle | null;
 };
 
 type LeaveDraft = {
@@ -76,9 +82,78 @@ type LeaveDraft = {
   };
 };
 
+type TravelDraftBundle = {
+  submitted: boolean;
+  recommendation: { flightId: string; hotelId: string; reason: string };
+  flightOptions: TravelFlightOption[];
+  hotelOptions: TravelHotelOption[];
+  approver: { staffName: string; title: string; email: string };
+  bookingRequest: {
+    id: string;
+    status: string;
+    flight: TravelFlightOption;
+    hotel: TravelHotelOption;
+    totalPrice: number;
+    currency: string;
+    confirmed: boolean;
+  };
+  travelRequest: {
+    id: string;
+    status: string;
+    traveler: { staffId: string; staffName: string; department: string; title: string };
+    destination: string;
+    fromDate: string;
+    toDate: string;
+    calendarDays: number;
+    nights: number;
+    purpose: string;
+  };
+  advanceRequest: {
+    id: string;
+    status: string;
+    linkedTravelRequestId: string;
+    amount: number;
+    currency: string;
+    note: string;
+    breakdown: {
+      hotelPerNight: number;
+      nights: number;
+      hotelTotal: number;
+      mealPerDay: number;
+      days: number;
+      mealTotal: number;
+      excludes: string[];
+    };
+  };
+};
+
+type TravelFlightOption = {
+  id: string;
+  airline: string;
+  outbound: string;
+  return: string;
+  route: string;
+  totalPrice: number;
+  baggage: string;
+  refundable: boolean;
+};
+
+type TravelHotelOption = {
+  id: string;
+  name: string;
+  area: string;
+  pricePerNight: number;
+  totalPrice: number;
+  distanceKm: number;
+  rating: number;
+  refundable: boolean;
+  policyCompliant: boolean;
+};
+
 type DemoQuestion = {
   text: string;
   badge?: string;
+  poweredBy?: "Tinyfish";
   description?: string;
 };
 
@@ -101,6 +176,7 @@ const roleTone: Record<string, string> = {
 };
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<"workspace" | "tracing">("workspace");
   const [users, setUsers] = useState<User[]>([]);
   const [demoQuestions, setDemoQuestions] = useState<DemoQuestion[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("U001");
@@ -116,7 +192,9 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [openedDraft, setOpenedDraft] = useState<LeaveDraft | null>(null);
   const [draftOverrides, setDraftOverrides] = useState<Record<string, LeaveDraft>>({});
-  const [showSubmissionNotice, setShowSubmissionNotice] = useState(false);
+  const [openedTravelDrafts, setOpenedTravelDrafts] = useState<TravelDraftBundle | null>(null);
+  const [travelDraftOverrides, setTravelDraftOverrides] = useState<Record<string, TravelDraftBundle>>({});
+  const [submissionNotice, setSubmissionNotice] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const selectedUser = useMemo(
@@ -175,6 +253,37 @@ export default function Home() {
     }
   }
 
+  function selectTravelFlight(flight: TravelFlightOption) {
+    setOpenedTravelDrafts((current) => current ? {
+      ...current,
+      bookingRequest: {
+        ...current.bookingRequest,
+        flight,
+        totalPrice: flight.totalPrice + current.bookingRequest.hotel.totalPrice,
+      },
+      advanceRequest: {
+        ...current.advanceRequest,
+        amount: flight.totalPrice + current.bookingRequest.hotel.totalPrice + current.advanceRequest.breakdown.mealTotal,
+      },
+    } : current);
+  }
+
+  function selectTravelHotel(hotel: TravelHotelOption) {
+    if (!hotel.policyCompliant) return;
+    setOpenedTravelDrafts((current) => current ? {
+      ...current,
+      bookingRequest: {
+        ...current.bookingRequest,
+        hotel,
+        totalPrice: current.bookingRequest.flight.totalPrice + hotel.totalPrice,
+      },
+      advanceRequest: {
+        ...current.advanceRequest,
+        amount: current.bookingRequest.flight.totalPrice + hotel.totalPrice + current.advanceRequest.breakdown.mealTotal,
+      },
+    } : current);
+  }
+
   return (
     <main className="min-h-screen bg-[#f6f8fb] text-[#122033] lg:h-dvh lg:min-h-0 lg:overflow-hidden">
       <div className="mx-auto flex min-h-screen max-w-[1500px] flex-col gap-4 px-4 py-4 lg:h-dvh lg:min-h-0 lg:px-6">
@@ -196,27 +305,55 @@ export default function Home() {
               Secure enterprise knowledge
             </div>
           </div>
-          <details className="group relative shrink-0">
-            <summary
-              className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border border-slate-200 bg-white text-[#315f9a] shadow-sm transition hover:border-[#75a9eb] hover:bg-[#edf5ff] focus:outline-none focus:ring-2 focus:ring-[#8bb6f0] [&::-webkit-details-marker]:hidden"
-              aria-label="Thông tin hệ thống"
-              title="Thông tin hệ thống"
-            >
-              <Info className="h-4.5 w-4.5" />
-            </summary>
-            <div className="absolute right-0 z-30 mt-2 w-72 rounded-md border border-slate-200 bg-white p-3 shadow-lg">
-              <div className="mb-2 text-sm font-semibold text-[#13253d]">Thông tin hệ thống</div>
-              <dl className="divide-y divide-slate-100 text-sm">
-                <InfoRow label="Version" value={APP_VERSION} />
-                <InfoRow label="Documents" value="40" />
-                <InfoRow label="Demo users" value="32" />
-                <InfoRow label="Access rules" value="RBAC + ABAC" />
-                <InfoRow label="My Tasco tools" value="3 mock APIs" />
-              </dl>
-            </div>
-          </details>
+          <div className="flex shrink-0 items-center gap-3">
+            <nav className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm" aria-label="Workspace views">
+              <button
+                type="button"
+                onClick={() => setActiveTab("workspace")}
+                className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition ${
+                  activeTab === "workspace" ? "bg-[#1f5fbf] text-white" : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <MessageSquareText className="h-4 w-4" />
+                <span className="hidden sm:inline">AI Workspace</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("tracing")}
+                className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition ${
+                  activeTab === "tracing" ? "bg-[#1f5fbf] text-white" : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Activity className="h-4 w-4" />
+                <span className="hidden sm:inline">Langfuse Tracing</span>
+                <span className={`hidden rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide sm:inline ${
+                  activeTab === "tracing" ? "bg-white/15 text-white" : "bg-violet-100 text-violet-700"
+                }`}>Demo</span>
+              </button>
+            </nav>
+            <details className="group relative shrink-0">
+              <summary
+                className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border border-slate-200 bg-white text-[#315f9a] shadow-sm transition hover:border-[#75a9eb] hover:bg-[#edf5ff] focus:outline-none focus:ring-2 focus:ring-[#8bb6f0] [&::-webkit-details-marker]:hidden"
+                aria-label="Thông tin hệ thống"
+                title="Thông tin hệ thống"
+              >
+                <Info className="h-4.5 w-4.5" />
+              </summary>
+              <div className="absolute right-0 z-30 mt-2 w-72 rounded-md border border-slate-200 bg-white p-3 shadow-lg">
+                <div className="mb-2 text-sm font-semibold text-[#13253d]">Thông tin hệ thống</div>
+                <dl className="divide-y divide-slate-100 text-sm">
+                  <InfoRow label="Version" value={APP_VERSION} />
+                  <InfoRow label="Documents" value="40" />
+                  <InfoRow label="Demo users" value="32" />
+                  <InfoRow label="Access rules" value="RBAC + ABAC" />
+                  <InfoRow label="My Tasco tools" value="3 mock APIs" />
+                </dl>
+              </div>
+            </details>
+          </div>
         </header>
 
+        {activeTab === "workspace" ? (
         <section className="grid flex-1 gap-4 lg:min-h-0 lg:grid-cols-[300px_minmax(0,1fr)_360px]">
           <aside className="flex flex-col gap-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
             <Panel title="Fast Scenarios" icon={<Search className="h-4 w-4" />}>
@@ -229,7 +366,7 @@ export default function Home() {
                     className="rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 transition hover:border-[#75a9eb] hover:bg-[#edf5ff]"
                   >
                     {item.badge && (
-                      <span className="mb-1.5 flex justify-end">
+                      <span className="mb-1.5 flex flex-wrap items-center justify-start gap-2">
                         <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
                           item.badge === "AI Agent"
                             ? "bg-violet-100 text-violet-700"
@@ -237,12 +374,27 @@ export default function Home() {
                         }`}>
                           {item.badge}
                         </span>
+                        {item.poweredBy === "Tinyfish" && (
+                          <span className="inline-flex items-center gap-1 border-l border-violet-200 pl-2 text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+                            <span>Powered by</span>
+                            <Image
+                              src="/tinyfish-horizontal.svg"
+                              alt="Tinyfish"
+                              width={66}
+                              height={15}
+                              className="h-3 w-auto"
+                            />
+                          </span>
+                        )}
+                        {item.description && (
+                          <span className="text-[11px] leading-4 text-violet-600">{item.description}</span>
+                        )}
                       </span>
                     )}
                     <span className="block w-full">
                       {item.text}
                     </span>
-                    {item.description && (
+                    {!item.badge && item.description && (
                       <span className="mt-1.5 block text-xs leading-4 text-violet-600">{item.description}</span>
                     )}
                   </button>
@@ -262,6 +414,7 @@ export default function Home() {
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#fbfcfe] p-4">
               {messages.map((message) => {
                 const draft = getLeaveDraft(message.toolResult);
+                const travelDrafts = getTravelDrafts(message.toolResult);
                 return (
                 <div
                   key={message.id}
@@ -282,6 +435,15 @@ export default function Home() {
                         className="mt-3 inline-flex items-center text-sm font-semibold text-[#1f5fbf] underline decoration-[#8bb6f0] underline-offset-4 transition hover:text-[#174c9c]"
                       >
                         Xem đơn nháp đã tạo
+                      </button>
+                    )}
+                    {travelDrafts && (
+                      <button
+                        type="button"
+                        onClick={() => setOpenedTravelDrafts(travelDraftOverrides[travelDrafts.travelRequest.id] || travelDrafts)}
+                        className="mt-3 block text-sm font-semibold text-[#1f5fbf] underline decoration-[#8bb6f0] underline-offset-4 transition hover:text-[#174c9c]"
+                      >
+                        Xem đề nghị công tác và tạm ứng
                       </button>
                     )}
                     {message.intent && (
@@ -376,29 +538,69 @@ export default function Home() {
               description="Các bước Mina đã thực thi cho yêu cầu nhiều tác vụ. Tool nghiệp vụ tạo nháp nhưng không tự gửi đơn."
               defaultCollapsed
               className="order-2"
-              expandedSignal={latestAgentResult?.name === "leave.agent" ? latestAssistant?.id : undefined}
+              expandedSignal={latestAgentResult?.name?.endsWith(".agent") ? latestAssistant?.id : undefined}
             >
-              <div className="space-y-2">
-                {latestAgentResult?.name === "leave.agent" && latestAgentResult.steps?.length ? (
-                  latestAgentResult.steps.map((step, index) => (
-                    <div key={`${step.name}-${index}`} className="rounded-md border border-slate-200 bg-white p-3 text-xs">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-slate-700">{index + 1}. {step.name}</span>
-                        <span className={`rounded px-2 py-1 font-semibold ${
-                          step.status === "completed"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : step.status === "blocked"
-                              ? "bg-rose-50 text-rose-700"
-                              : "bg-amber-50 text-amber-700"
-                        }`}>
-                          {step.status}
-                        </span>
+              <div className="space-y-3">
+                {latestAgentResult?.name?.endsWith(".agent") && latestAgentResult.steps?.length ? (
+                  <>
+                    <TraceGroup title="Plan" tone="blue">
+                      <ol className="space-y-1.5 text-xs leading-5 text-slate-600">
+                        {latestAgentResult.plan?.map((item, index) => (
+                          <li key={item} className="flex gap-2">
+                            <span className="font-semibold text-[#315f9a]">{index + 1}.</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </TraceGroup>
+
+                    <TraceGroup title="Decision" tone="amber">
+                      <div className="space-y-2">
+                        {latestAgentResult.decisions?.map((decision) => (
+                          <div key={decision.label} className="text-xs leading-5">
+                            <div className="font-semibold text-slate-700">{decision.label}</div>
+                            <div className="text-slate-500">{decision.summary}</div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="mt-2 leading-5 text-slate-500">{step.summary}</div>
-                    </div>
-                  ))
+                    </TraceGroup>
+
+                    <TraceGroup title="Actions" tone="slate">
+                      <div className="space-y-2">
+                        {latestAgentResult.steps.map((step, index) => (
+                          <div key={`${step.name}-${index}`} className="rounded border border-slate-200 bg-white p-2.5 text-xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-slate-700">{step.name}</span>
+                              <span className={`rounded px-1.5 py-0.5 font-semibold ${
+                                step.status === "completed"
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : step.status === "blocked"
+                                    ? "bg-rose-50 text-rose-700"
+                                    : "bg-amber-50 text-amber-700"
+                              }`}>
+                                {step.status}
+                              </span>
+                            </div>
+                            <div className="mt-1 leading-5 text-slate-500">{step.summary}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </TraceGroup>
+
+                    <TraceGroup title="Approval" tone="violet">
+                      <div className="text-xs leading-5">
+                        <div className="font-semibold text-violet-700">
+                          {latestAgentResult.approval?.status === "awaiting_user_confirmation"
+                            ? "Chờ user xác nhận"
+                            : "Đang bị chặn"}
+                        </div>
+                        <div className="mt-1 text-slate-600">{latestAgentResult.approval?.summary}</div>
+                        <div className="mt-1 text-slate-500">Bước tiếp theo: {latestAgentResult.approval?.nextAction}</div>
+                      </div>
+                    </TraceGroup>
+                  </>
                 ) : (
-                  <Empty text="Trace sẽ xuất hiện khi chạy yêu cầu nghỉ phép nhiều bước." />
+                  <Empty text="Trace sẽ xuất hiện khi chạy một yêu cầu AI Agent nhiều bước." />
                 )}
               </div>
             </Panel>
@@ -492,6 +694,9 @@ export default function Home() {
 
           </aside>
         </section>
+        ) : (
+          <LangfuseTracing />
+        )}
       </div>
       {openedDraft && (
         <div
@@ -546,7 +751,7 @@ export default function Home() {
                   const submittedDraft = { ...openedDraft, submitted: true, status: "SUBMITTED" };
                   setOpenedDraft(submittedDraft);
                   setDraftOverrides((current) => ({ ...current, [submittedDraft.id]: submittedDraft }));
-                  setShowSubmissionNotice(true);
+                  setSubmissionNotice("Đơn nghỉ phép đã được chuyển tới người phê duyệt.");
                 }}
                 className="rounded-md bg-[#1f5fbf] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#174c9c] disabled:cursor-not-allowed disabled:bg-slate-300"
               >
@@ -556,15 +761,196 @@ export default function Home() {
           </section>
         </div>
       )}
-      {showSubmissionNotice && (
+      {openedTravelDrafts && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="travel-draft-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOpenedTravelDrafts(null);
+          }}
+        >
+          <section className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-[#315f9a]">My Tasco · Business travel workflow</div>
+                <h2 id="travel-draft-title" className="mt-1 text-xl font-semibold text-[#13253d]">Bộ nháp công tác và tạm ứng</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenedTravelDrafts(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Đóng bộ nháp công tác"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <section className="mt-4 rounded-lg border border-violet-200 bg-violet-50/40 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-semibold text-[#13253d]">Phương án đặt dịch vụ</h3>
+                <a
+                  href="https://www.tinyfish.ai/"
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Powered by Tinyfish · Mock integration"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-violet-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 transition hover:border-[#ff6700] hover:shadow-sm"
+                >
+                  <span>Powered by</span>
+                  <Image
+                    src="/tinyfish-horizontal.svg"
+                    alt="Tinyfish"
+                    width={88}
+                    height={20}
+                    className="h-4 w-auto"
+                  />
+                </a>
+              </div>
+              <p className="mt-1 text-xs leading-5 text-slate-600">{openedTravelDrafts.recommendation.reason}</p>
+
+              <div className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Chuyến bay</div>
+              <div className="mt-2 grid gap-2 md:grid-cols-3">
+                {openedTravelDrafts.flightOptions.map((flight) => {
+                  const selected = openedTravelDrafts.bookingRequest.flight.id === flight.id;
+                  return (
+                    <button
+                      key={flight.id}
+                      type="button"
+                      disabled={openedTravelDrafts.submitted}
+                      onClick={() => selectTravelFlight(flight)}
+                      className={`rounded-md border p-3 text-left text-xs transition ${selected ? "border-violet-500 bg-white ring-2 ring-violet-200" : "border-slate-200 bg-white hover:border-violet-300"}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-semibold text-slate-800">{flight.airline}</span>
+                        {selected && <span className="text-violet-700">Đã chọn</span>}
+                      </div>
+                      <div className="mt-1 text-slate-500">Đi {flight.outbound.slice(11)} · Về {flight.return.slice(11)}</div>
+                      <div className="mt-1 text-slate-500">Hành lý {flight.baggage} · {flight.refundable ? "Có hoàn huỷ" : "Không hoàn huỷ"}</div>
+                      <div className="mt-2 font-semibold text-[#13253d]">{formatMoney(flight.totalPrice)} VND</div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Khách sạn</div>
+              <div className="mt-2 grid gap-2 md:grid-cols-3">
+                {openedTravelDrafts.hotelOptions.map((hotel) => {
+                  const selected = openedTravelDrafts.bookingRequest.hotel.id === hotel.id;
+                  return (
+                    <button
+                      key={hotel.id}
+                      type="button"
+                      disabled={openedTravelDrafts.submitted || !hotel.policyCompliant}
+                      onClick={() => selectTravelHotel(hotel)}
+                      className={`rounded-md border p-3 text-left text-xs transition ${selected ? "border-violet-500 bg-white ring-2 ring-violet-200" : hotel.policyCompliant ? "border-slate-200 bg-white hover:border-violet-300" : "cursor-not-allowed border-rose-200 bg-rose-50 opacity-70"}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-semibold text-slate-800">{hotel.name}</span>
+                        {selected ? <span className="text-violet-700">Đã chọn</span> : !hotel.policyCompliant && <span className="text-rose-700">Vượt định mức</span>}
+                      </div>
+                      <div className="mt-1 text-slate-500">{hotel.area} · {hotel.distanceKm} km · ★ {hotel.rating}</div>
+                      <div className="mt-1 text-slate-500">{hotel.refundable ? "Có hoàn huỷ" : "Không hoàn huỷ"}</div>
+                      <div className="mt-2 font-semibold text-[#13253d]">{formatMoney(hotel.pricePerNight)} VND/đêm</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <section className="rounded-lg border border-blue-200 bg-blue-50/40 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-semibold text-[#13253d]">Đề nghị công tác</h3>
+                  <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-blue-700">{openedTravelDrafts.travelRequest.id}</span>
+                </div>
+                <dl className="mt-3 divide-y divide-blue-100 text-sm">
+                  <DraftRow label="Nhân viên" value={openedTravelDrafts.travelRequest.traveler.staffName} />
+                  <DraftRow label="Phòng ban" value={openedTravelDrafts.travelRequest.traveler.department} />
+                  <DraftRow label="Địa điểm" value={openedTravelDrafts.travelRequest.destination} />
+                  <DraftRow label="Thời gian" value={`${formatDisplayDate(openedTravelDrafts.travelRequest.fromDate)} – ${formatDisplayDate(openedTravelDrafts.travelRequest.toDate)}`} />
+                  <DraftRow label="Thời lượng" value={`${openedTravelDrafts.travelRequest.calendarDays} ngày · ${openedTravelDrafts.travelRequest.nights} đêm`} />
+                </dl>
+                <label htmlFor="travel-purpose" className="mt-3 block text-xs font-semibold uppercase tracking-wide text-slate-500">Mục đích công tác</label>
+                <textarea
+                  id="travel-purpose"
+                  value={openedTravelDrafts.travelRequest.purpose}
+                  disabled={openedTravelDrafts.submitted}
+                  onChange={(event) => setOpenedTravelDrafts((current) => current ? {
+                    ...current,
+                    travelRequest: { ...current.travelRequest, purpose: event.target.value },
+                  } : current)}
+                  className="mt-2 min-h-24 w-full resize-y rounded-md border border-blue-200 bg-white px-3 py-2 text-sm leading-6 outline-none ring-[#8bb6f0] focus:ring-2 disabled:bg-slate-100"
+                />
+              </section>
+
+              <section className="rounded-lg border border-amber-200 bg-amber-50/40 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-semibold text-[#13253d]">Đề nghị tạm ứng</h3>
+                  <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-amber-700">{openedTravelDrafts.advanceRequest.id}</span>
+                </div>
+                <dl className="mt-3 divide-y divide-amber-100 text-sm">
+                  <DraftRow label="Khách sạn" value={`${formatMoney(openedTravelDrafts.advanceRequest.breakdown.hotelTotal)} VND`} />
+                  <DraftRow label="Phụ cấp" value={`${formatMoney(openedTravelDrafts.advanceRequest.breakdown.mealTotal)} VND`} />
+                  <DraftRow label="Tổng tạm ứng" value={`${formatMoney(openedTravelDrafts.advanceRequest.amount)} VND`} />
+                  <DraftRow label="Booking draft" value={openedTravelDrafts.bookingRequest.id} />
+                  <DraftRow label="Liên kết" value={openedTravelDrafts.advanceRequest.linkedTravelRequestId} />
+                </dl>
+                <label htmlFor="advance-note" className="mt-3 block text-xs font-semibold uppercase tracking-wide text-slate-500">Ghi chú tạm ứng</label>
+                <textarea
+                  id="advance-note"
+                  value={openedTravelDrafts.advanceRequest.note}
+                  disabled={openedTravelDrafts.submitted}
+                  onChange={(event) => setOpenedTravelDrafts((current) => current ? {
+                    ...current,
+                    advanceRequest: { ...current.advanceRequest, note: event.target.value },
+                  } : current)}
+                  className="mt-2 min-h-24 w-full resize-y rounded-md border border-amber-200 bg-white px-3 py-2 text-sm leading-6 outline-none ring-[#8bb6f0] focus:ring-2 disabled:bg-slate-100"
+                />
+              </section>
+            </div>
+
+            <div className="mt-4 rounded-md border border-violet-200 bg-violet-50/50 p-3 text-sm">
+              <div className="font-semibold text-violet-700">Sếp phụ trách dự kiến</div>
+              <div className="mt-1 text-slate-700">{openedTravelDrafts.approver.staffName} · {openedTravelDrafts.approver.title}</div>
+              <div className="text-slate-500">{openedTravelDrafts.approver.email}</div>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                disabled={openedTravelDrafts.submitted || !openedTravelDrafts.travelRequest.purpose.trim() || !openedTravelDrafts.advanceRequest.note.trim()}
+                onClick={() => {
+                  const submittedBundle = {
+                    ...openedTravelDrafts,
+                    submitted: true,
+                    travelRequest: { ...openedTravelDrafts.travelRequest, status: "SUBMITTED" },
+                    advanceRequest: { ...openedTravelDrafts.advanceRequest, status: "SUBMITTED" },
+                  };
+                  setOpenedTravelDrafts(submittedBundle);
+                  setTravelDraftOverrides((current) => ({
+                    ...current,
+                    [submittedBundle.travelRequest.id]: submittedBundle,
+                  }));
+                  setSubmissionNotice("Đề nghị công tác và tạm ứng đã được chuyển tới sếp phụ trách.");
+                }}
+                className="rounded-md bg-[#1f5fbf] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#174c9c] disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {openedTravelDrafts.submitted ? "Đã gửi duyệt" : "Gửi duyệt"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {submissionNotice && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/25 p-4" role="alertdialog" aria-modal="true">
           <section className="w-full max-w-sm rounded-xl border border-emerald-200 bg-white p-5 text-center shadow-2xl">
             <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" />
             <h2 className="mt-3 text-lg font-semibold text-[#13253d]">Đã gửi yêu cầu lên hệ thống</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Đơn nghỉ phép đã được chuyển tới người phê duyệt.</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{submissionNotice}</p>
             <button
               type="button"
-              onClick={() => setShowSubmissionNotice(false)}
+              onClick={() => setSubmissionNotice(null)}
               className="mt-4 rounded-md bg-[#1f5fbf] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#174c9c]"
             >
               Xác nhận
@@ -582,8 +968,18 @@ function getLeaveDraft(toolResult: unknown) {
   return result.name === "leave.agent" && result.draft ? result.draft : null;
 }
 
+function getTravelDrafts(toolResult: unknown) {
+  if (!toolResult || typeof toolResult !== "object") return null;
+  const result = toolResult as AgentToolResult;
+  return result.name === "travel.agent" && result.travelDrafts ? result.travelDrafts : null;
+}
+
 function formatDisplayDate(value: string) {
   return new Intl.DateTimeFormat("vi-VN").format(new Date(`${value}T00:00:00Z`));
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("vi-VN").format(value);
 }
 
 function DraftRow({ label, value }: { label: string; value: string }) {
@@ -592,6 +988,29 @@ function DraftRow({ label, value }: { label: string; value: string }) {
       <dt className="text-slate-500">{label}</dt>
       <dd className="text-right font-medium text-[#13253d]">{value}</dd>
     </div>
+  );
+}
+
+function TraceGroup({
+  title,
+  tone,
+  children,
+}: {
+  title: string;
+  tone: "blue" | "amber" | "slate" | "violet";
+  children: React.ReactNode;
+}) {
+  const tones = {
+    blue: "border-blue-200 bg-blue-50/60 text-blue-700",
+    amber: "border-amber-200 bg-amber-50/60 text-amber-700",
+    slate: "border-slate-200 bg-slate-50 text-slate-700",
+    violet: "border-violet-200 bg-violet-50/60 text-violet-700",
+  };
+  return (
+    <section className={`rounded-md border p-3 ${tones[tone]}`}>
+      <div className="mb-2 text-[11px] font-bold uppercase tracking-wider">{title}</div>
+      {children}
+    </section>
   );
 }
 

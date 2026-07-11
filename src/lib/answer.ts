@@ -87,3 +87,32 @@ export async function composeLeaveAgentAnswer(
   });
   return response.choices[0]?.message.content || fallback;
 }
+
+export async function composeTravelAgentAnswer(
+  question: string,
+  user: User,
+  hits: SearchHit[],
+  result: Record<string, unknown>,
+) {
+  const fallback = String(result.fallbackAnswer || "Đã hoàn tất luồng chuẩn bị công tác và tạm ứng.");
+  if (!process.env.OPENAI_API_KEY) return fallback;
+
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const policyContext = hits.slice(0, 3).map((hit) => `[${hit.document_id}] ${hit.content}`).join("\n\n");
+  const response = await client.chat.completions.create({
+    model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+    temperature: 0.2,
+    messages: [
+      {
+        role: "system",
+        content:
+          "Bạn là Mina Travel Agent. Báo cáo ngắn gọn bằng tiếng Việt: chính sách, lịch công tác, các phương án bay/khách sạn, phương án đề xuất và lý do, tổng tạm ứng, các nháp đã chuẩn bị và người phê duyệt dự kiến. Chỉ dùng policy context và tool results. Luôn nêu rõ chưa đặt dịch vụ, chưa gửi duyệt và đang chờ user chọn/xác nhận.",
+      },
+      {
+        role: "user",
+        content: `Operator: ${user.full_name}\nYêu cầu: ${question}\n\nPolicy context:\n${policyContext}\n\nTool results:\n${JSON.stringify(result)}`,
+      },
+    ],
+  });
+  return response.choices[0]?.message.content || fallback;
+}

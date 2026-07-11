@@ -1,15 +1,22 @@
 import { NextResponse } from "next/server";
-import { citationsFromHits, composeAnswer, composeLeaveAgentAnswer } from "@/lib/answer";
+import { citationsFromHits, composeAnswer, composeLeaveAgentAnswer, composeTravelAgentAnswer } from "@/lib/answer";
 import { appendAuditLog, getUser } from "@/lib/data";
 import { searchKnowledge } from "@/lib/search";
 import {
   attendanceByStaff,
+  calculateTravelAllowance,
   createAgentLeaveDraft,
   createLeaveDraft,
+  createTravelDraftBundle,
   detectToolIntent,
   findLeaveApprover,
+  findTravelEmployee,
   leaveBalance,
   parseLeavePeriod,
+  parseTravelPeriod,
+  recommendTravelOptions,
+  searchFlightOptions,
+  searchHotelOptions,
   staffCount,
   staffSearch,
 } from "@/lib/tools";
@@ -29,6 +36,8 @@ export async function POST(request: Request) {
   let answer = "";
   const retrieved = toolIntent === "leave.agent"
     ? searchKnowledge("chính sách nghỉ phép số ngày nghỉ phép năm", user, 8)
+    : toolIntent === "travel.agent"
+      ? searchKnowledge("chính sách công tác khách sạn phụ cấp ăn uống phê duyệt", user, 8)
     : toolIntent ? [] : searchKnowledge(question, user, 8);
   const authorized = retrieved.filter((hit) => hit.allowed);
   let answerSources = authorized;
@@ -44,7 +53,84 @@ export async function POST(request: Request) {
       (!bestAllowed || topHit.score > bestAllowed.score),
   );
 
-  if (toolIntent === "leave.agent") {
+  if (toolIntent === "travel.agent") {
+    const period = parseTravelPeriod(question);
+    const traveler = findTravelEmployee(question);
+    const destination = "Đà Nẵng";
+    const policyHit = authorized.find((hit) => hit.document_id === "DOC003");
+    if (!period || !traveler) {
+      answerSources = policyHit ? [policyHit] : [];
+      toolResult = {
+        name: toolIntent,
+        status: "needs_input",
+        steps: [{ name: "travel.parse_request", status: "needs_input", summary: "Thiếu nhân viên hoặc khoảng ngày công tác hợp lệ." }],
+      };
+      answer = "Em chưa xác định đủ nhân viên và khoảng ngày công tác. Anh vui lòng nhập họ tên cùng ngày bắt đầu và kết thúc cụ thể.";
+    } else if (!policyHit) {
+      answerSources = [];
+      toolResult = {
+        name: toolIntent,
+        status: "blocked",
+        steps: [{ name: "knowledge.search_policy", status: "blocked", summary: "Không có quyền đọc chính sách công tác." }],
+      };
+      answer = "Em chưa thể tạo nháp vì không tìm thấy chính sách công tác mà user hiện tại được phép truy cập.";
+    } else {
+      const allowance = calculateTravelAllowance(destination, period);
+      const flightOptions = searchFlightOptions(period);
+      const hotelOptions = searchHotelOptions(period, allowance.hotelPerNight);
+      const recommendation = recommendTravelOptions(flightOptions, hotelOptions);
+      const selectedFlight = flightOptions.find((item) => item.id === recommendation.flightId) || flightOptions[0];
+      const selectedHotel = hotelOptions.find((item) => item.id === recommendation.hotelId) || hotelOptions[0];
+      const drafts = createTravelDraftBundle(traveler, period, allowance, selectedFlight, selectedHotel);
+      const money = new Intl.NumberFormat("vi-VN").format(drafts.advanceRequest.amount);
+      const fallbackAnswer = `Đã tìm và đề xuất phương án công tác cho ${traveler.staffName}:\n1. Lịch ${period.fromDate} đến ${period.toDate}: ${period.calendarDays} ngày, ${period.nights} đêm.\n2. Đề xuất ${selectedFlight.airline} (${new Intl.NumberFormat("vi-VN").format(selectedFlight.totalPrice)} VND) và ${selectedHotel.name} (${new Intl.NumberFormat("vi-VN").format(selectedHotel.pricePerNight)} VND/đêm), đúng định mức DOC003.\n3. Tổng tạm ứng dự kiến gồm vé, khách sạn và phụ cấp: ${money} VND.\n4. Đã chuẩn bị bộ nháp booking, công tác và tạm ứng theo phương án đề xuất. Chưa đặt dịch vụ/chưa gửi duyệt; đang chờ user chọn và xác nhận.`;
+      const agentResult = {
+        name: toolIntent,
+        status: "completed",
+        traveler,
+        period,
+        allowance,
+        flightOptions,
+        hotelOptions,
+        recommendation,
+        travelDrafts: { ...drafts, flightOptions, hotelOptions, recommendation },
+        fallbackAnswer,
+        plan: [
+          "Tra cứu chính sách công tác theo quyền truy cập.",
+          "Xác định nhân viên, địa điểm, số ngày và số đêm.",
+          "Tìm chuyến bay và khách sạn, lọc theo định mức rồi so sánh phương án.",
+          "Chuẩn bị booking, đề nghị công tác và tạm ứng; chờ user chọn trước khi gửi duyệt.",
+        ],
+        decisions: [
+          { label: "Policy & access", summary: `Dùng DOC003 làm căn cứ: ${policyHit.reason}` },
+          { label: "Trip calculation", summary: `${period.calendarDays} ngày, ${period.nights} đêm tại ${destination}; áp dụng định mức thành phố lớn.` },
+          { label: "Advance scope", summary: `Tạm ứng ${money} VND gồm vé máy bay, khách sạn và ăn uống; chưa tính di chuyển nội thành.` },
+          { label: "Recommended option", summary: `${selectedFlight.airline} + ${selectedHotel.name}. ${recommendation.reason}` },
+          { label: "Approval routing", summary: `Tuyến duyệt dự kiến: ${drafts.approver.staffName} — ${drafts.approver.title}.` },
+        ],
+        approval: {
+          status: "awaiting_user_confirmation",
+          summary: `Đã chuẩn bị ${drafts.bookingRequest.id}, ${drafts.travelRequest.id} và ${drafts.advanceRequest.id}; chưa đặt/chưa gửi duyệt.`,
+          nextAction: "User chọn chuyến bay, khách sạn, kiểm tra bộ nháp rồi xác nhận gửi duyệt.",
+        },
+        steps: [
+          { name: "knowledge.search_travel_policy", status: "completed", summary: `Đã đọc DOC003 theo ACL: ${policyHit.reason}` },
+          { name: "staff.resolve_traveler", status: "completed", summary: `${traveler.staffName} — ${traveler.department}.` },
+          { name: "travel.calculate_allowance", status: "completed", summary: `${period.calendarDays} ngày/${period.nights} đêm; tạm ứng ${money} VND.` },
+          { name: "flight.search", status: "completed", summary: `Tìm thấy ${flightOptions.length} phương án chuyến bay.` },
+          { name: "hotel.search", status: "completed", summary: `Tìm thấy ${hotelOptions.length} khách sạn; ${hotelOptions.filter((item) => item.policyCompliant).length} đúng định mức.` },
+          { name: "travel.compare_options", status: "completed", summary: `Đề xuất ${selectedFlight.airline} + ${selectedHotel.name}.` },
+          { name: "booking.create_draft", status: "completed", summary: `Đã chuẩn bị ${drafts.bookingRequest.id}; chưa đặt dịch vụ.` },
+          { name: "travel.create_draft", status: "completed", summary: `Đã tạo ${drafts.travelRequest.id}.` },
+          { name: "advance.create_draft", status: "completed", summary: `Đã tạo ${drafts.advanceRequest.id}, liên kết ${drafts.travelRequest.id}.` },
+          { name: "approval.prepare_route", status: "completed", summary: `Đã chuẩn bị tuyến duyệt tới ${drafts.approver.staffName}; chưa gửi.` },
+        ],
+      };
+      answerSources = [policyHit];
+      toolResult = agentResult;
+      answer = await composeTravelAgentAnswer(question, user, [policyHit], agentResult);
+    }
+  } else if (toolIntent === "leave.agent") {
     const period = parseLeavePeriod(question);
     const balance = leaveBalance(user);
     const approver = findLeaveApprover(user);
@@ -79,6 +165,37 @@ export async function POST(request: Request) {
         approver,
         draft,
         fallbackAnswer,
+        plan: [
+          "Tra cứu chính sách nghỉ phép theo quyền của user.",
+          "Chuẩn hóa khoảng ngày và tính số ngày làm việc.",
+          "Kiểm tra số dư phép và xác định người phê duyệt.",
+          "Tạo nháp đơn nếu đủ điều kiện; chờ user xác nhận trước khi gửi.",
+        ],
+        decisions: [
+          {
+            label: "Policy & access",
+            summary: `Được phép dùng DOC002 làm căn cứ: ${policyHit.reason}`,
+          },
+          {
+            label: "Eligibility",
+            summary: eligible
+              ? `Đủ điều kiện: cần ${period.workingDays} ngày, còn ${balance.remaining} ngày phép.`
+              : `Không đủ điều kiện: cần ${period.workingDays} ngày, chỉ còn ${balance.remaining} ngày phép.`,
+          },
+          {
+            label: "Approver routing",
+            summary: `Chuyển theo tuyến quản lý tới ${approver.staffName} — ${approver.title}.`,
+          },
+        ],
+        approval: {
+          status: eligible ? "awaiting_user_confirmation" : "blocked",
+          summary: draft
+            ? `Đã tạo nháp ${draft.id}; chưa gửi ra hệ thống.`
+            : "Chưa tạo nháp vì điều kiện số dư không đạt.",
+          nextAction: draft
+            ? "User mở đơn nháp, kiểm tra nội dung và bấm Gửi yêu cầu."
+            : "Điều chỉnh khoảng nghỉ hoặc bổ sung phê duyệt ngoại lệ.",
+        },
         steps: [
           { name: "knowledge.search_policy", status: "completed", summary: `Đã đọc DOC002 theo ACL: ${policyHit.reason}` },
           { name: "leave.calculate_days", status: "completed", summary: `${period.workingDays} ngày làm việc (${period.fromDate} → ${period.toDate}).` },
