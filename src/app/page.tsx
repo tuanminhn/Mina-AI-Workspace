@@ -84,6 +84,12 @@ type LeaveDraft = {
 
 type TravelDraftBundle = {
   submitted: boolean;
+  liveSearch?: {
+    provider: "tinyfish" | "demo";
+    status: "live" | "unavailable" | "failed";
+    message: string;
+    sources?: Array<{ kind: "flight" | "hotel"; siteName: string; title: string; snippet: string; url: string }>;
+  };
   recommendation: { flightId: string; hotelId: string; reason: string };
   flightOptions: TravelFlightOption[];
   hotelOptions: TravelHotelOption[];
@@ -136,6 +142,8 @@ type TravelFlightOption = {
   totalPrice: number;
   baggage: string;
   refundable: boolean;
+  sourceUrl?: string;
+  summary?: string;
 };
 
 type TravelHotelOption = {
@@ -148,6 +156,8 @@ type TravelHotelOption = {
   rating: number;
   refundable: boolean;
   policyCompliant: boolean;
+  sourceUrl?: string;
+  summary?: string;
 };
 
 type DemoQuestion = {
@@ -194,6 +204,8 @@ export default function Home() {
   const [draftOverrides, setDraftOverrides] = useState<Record<string, LeaveDraft>>({});
   const [openedTravelDrafts, setOpenedTravelDrafts] = useState<TravelDraftBundle | null>(null);
   const [travelDraftOverrides, setTravelDraftOverrides] = useState<Record<string, TravelDraftBundle>>({});
+  const [travelSourceDetails, setTravelSourceDetails] = useState<Record<string, { description: string; priceHint: string | null; priceVnd: number | null; fetchedAt: string }>>({});
+  const [travelSourceLoading, setTravelSourceLoading] = useState<Record<"flight" | "hotel", boolean>>({ flight: false, hotel: false });
   const [submissionNotice, setSubmissionNotice] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -217,6 +229,37 @@ export default function Home() {
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    const sources = openedTravelDrafts?.liveSearch?.sources || [];
+    if (!sources.length) return;
+    (['flight', 'hotel'] as const).forEach((kind) => {
+      const group = sources.filter((source) => source.kind === kind);
+      if (!group.length) return;
+      setTravelSourceLoading((current) => ({ ...current, [kind]: true }));
+      fetch('/api/tinyfish/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, sources: group }) })
+        .then((response) => response.json())
+        .then((data) => {
+          const enriched = data.sources || [];
+          setTravelSourceDetails((current) => ({ ...current, ...enriched.reduce((items: Record<string, { description: string; priceHint: string | null; priceVnd: number | null; fetchedAt: string }>, source: { url: string; description: string; priceHint: string | null; priceVnd: number | null; fetchedAt: string }) => ({ ...items, [source.url]: source }), {}) }));
+          const priced = enriched.filter((source: { priceVnd: number | null }) => Number(source.priceVnd) > 0);
+          if (!priced.length) return;
+          setOpenedTravelDrafts((current) => {
+            if (!current || current.travelRequest.id !== openedTravelDrafts?.travelRequest.id) return current;
+            if (kind === "flight") {
+              const flightOptions = priced.map((source: { url: string; siteName: string; priceVnd: number }, index: number) => ({ id: `TF-LIVE-FL-${index + 1}`, airline: source.siteName, outbound: `${current.travelRequest.fromDate} · Check source`, return: `${current.travelRequest.toDate} · Check source`, route: "HAN ↔ DAD", totalPrice: source.priceVnd, baggage: "Check source", refundable: false, sourceUrl: source.url }));
+              const flight = flightOptions[0];
+              return { ...current, flightOptions, bookingRequest: { ...current.bookingRequest, flight, totalPrice: flight.totalPrice + current.bookingRequest.hotel.totalPrice }, advanceRequest: { ...current.advanceRequest, amount: flight.totalPrice + current.bookingRequest.hotel.totalPrice + current.advanceRequest.breakdown.mealTotal } };
+            }
+            const hotelOptions = priced.map((source: { url: string; siteName: string; title: string; priceVnd: number }, index: number) => ({ id: `TF-LIVE-HT-${index + 1}`, name: source.title, area: source.siteName, pricePerNight: source.priceVnd, totalPrice: source.priceVnd * current.travelRequest.nights, distanceKm: 0, rating: 0, refundable: false, policyCompliant: source.priceVnd <= current.advanceRequest.breakdown.hotelPerNight, sourceUrl: source.url }));
+            const hotel = hotelOptions[0];
+            return { ...current, hotelOptions, bookingRequest: { ...current.bookingRequest, hotel, totalPrice: current.bookingRequest.flight.totalPrice + hotel.totalPrice }, advanceRequest: { ...current.advanceRequest, amount: current.bookingRequest.flight.totalPrice + hotel.totalPrice + current.advanceRequest.breakdown.mealTotal } };
+          });
+        })
+        .catch(() => undefined)
+        .finally(() => setTravelSourceLoading((current) => ({ ...current, [kind]: false })));
+    });
+  }, [openedTravelDrafts?.travelRequest.id]);
 
   async function ask(override?: string) {
     const finalQuestion = (override || question).trim();
@@ -458,9 +501,9 @@ export default function Home() {
                 );
               })}
               {loading && (
-                <div className="flex items-center gap-2 text-sm text-slate-500">
+                <div className="flex items-start gap-2 text-sm text-slate-500">
                   <Bot className="h-4 w-4 animate-pulse" />
-                  Mina đang kiểm quyền và tìm nguồn...
+                  <span>Mina đang kiểm quyền và tìm nguồn trên web. Việc này có thể mất 1–2 phút, anh chị vui lòng chờ...</span>
                 </div>
               )}
               <div ref={scrollRef} />
@@ -790,7 +833,7 @@ export default function Home() {
                   href="https://www.tinyfish.ai/"
                   target="_blank"
                   rel="noreferrer"
-                  title="Powered by Tinyfish · Mock integration"
+                  title="Powered by Tinyfish · Live web-source search"
                   className="inline-flex items-center gap-1.5 rounded-md border border-violet-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 transition hover:border-[#ff6700] hover:shadow-sm"
                 >
                   <span>Powered by</span>
@@ -805,6 +848,26 @@ export default function Home() {
               </div>
               <p className="mt-1 text-xs leading-5 text-slate-600">{openedTravelDrafts.recommendation.reason}</p>
 
+              {openedTravelDrafts.liveSearch && (
+                <div className="mt-3 rounded-md border border-violet-200 bg-white p-3 text-xs text-slate-600">
+                  <div className="font-semibold text-slate-800">Nguồn web {openedTravelDrafts.liveSearch.status === "live" ? "live từ Tinyfish" : "chưa sẵn sàng"}</div>
+                  <p className="mt-1 leading-5">{openedTravelDrafts.liveSearch.message}</p>
+                  {openedTravelDrafts.liveSearch.sources?.length ? (
+                    <ul className="mt-2 space-y-1.5">
+                      {openedTravelDrafts.liveSearch.sources.map((source) => (
+                        <li key={source.url} className="rounded border border-slate-100 p-2 leading-5">
+                          <span className="mr-1 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-violet-700">{source.kind}</span>
+                          <a href={source.url} target="_blank" rel="noreferrer" className="font-medium text-[#1f5fbf] underline underline-offset-2">{source.siteName}: {source.title}</a>
+                          {travelSourceDetails[source.url]?.priceHint ? <span className="ml-2 font-semibold text-emerald-700">Giá tham khảo: {travelSourceDetails[source.url].priceHint}</span> : null}
+                          <div className="mt-0.5 text-slate-500">{travelSourceDetails[source.url]?.description || source.snippet}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {(['flight', 'hotel'] as const).some((kind) => travelSourceLoading[kind]) ? <p className="mt-2 text-slate-500">Đang lấy giá và thông tin cơ bản từ nguồn web — kết quả nào xong sẽ hiển thị trước.</p> : null}
+                </div>
+              )}
+
               <div className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Chuyến bay</div>
               <div className="mt-2 grid gap-2 md:grid-cols-3">
                 {openedTravelDrafts.flightOptions.map((flight) => {
@@ -813,7 +876,7 @@ export default function Home() {
                     <button
                       key={flight.id}
                       type="button"
-                      disabled={openedTravelDrafts.submitted}
+                      disabled={openedTravelDrafts.submitted || !flight.totalPrice}
                       onClick={() => selectTravelFlight(flight)}
                       className={`rounded-md border p-3 text-left text-xs transition ${selected ? "border-violet-500 bg-white ring-2 ring-violet-200" : "border-slate-200 bg-white hover:border-violet-300"}`}
                     >
@@ -821,9 +884,11 @@ export default function Home() {
                         <span className="font-semibold text-slate-800">{flight.airline}</span>
                         {selected && <span className="text-violet-700">Đã chọn</span>}
                       </div>
+                      {flight.sourceUrl ? <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Tinyfish live · Giá tham khảo</div> : null}
                       <div className="mt-1 text-slate-500">Đi {flight.outbound.slice(11)} · Về {flight.return.slice(11)}</div>
                       <div className="mt-1 text-slate-500">Hành lý {flight.baggage} · {flight.refundable ? "Có hoàn huỷ" : "Không hoàn huỷ"}</div>
-                      <div className="mt-2 font-semibold text-[#13253d]">{formatMoney(flight.totalPrice)} VND</div>
+                      {flight.summary ? <div className="mt-1 line-clamp-3 text-slate-500">{flight.summary}</div> : null}
+                      <div className="mt-2 font-semibold text-[#13253d]">{flight.totalPrice ? `${formatMoney(flight.totalPrice)} VND` : "Đang lấy thông tin từ internet..."}</div>
                     </button>
                   );
                 })}
@@ -837,7 +902,7 @@ export default function Home() {
                     <button
                       key={hotel.id}
                       type="button"
-                      disabled={openedTravelDrafts.submitted || !hotel.policyCompliant}
+                      disabled={openedTravelDrafts.submitted || !hotel.policyCompliant || !hotel.pricePerNight}
                       onClick={() => selectTravelHotel(hotel)}
                       className={`rounded-md border p-3 text-left text-xs transition ${selected ? "border-violet-500 bg-white ring-2 ring-violet-200" : hotel.policyCompliant ? "border-slate-200 bg-white hover:border-violet-300" : "cursor-not-allowed border-rose-200 bg-rose-50 opacity-70"}`}
                     >
@@ -845,9 +910,11 @@ export default function Home() {
                         <span className="font-semibold text-slate-800">{hotel.name}</span>
                         {selected ? <span className="text-violet-700">Đã chọn</span> : !hotel.policyCompliant && <span className="text-rose-700">Vượt định mức</span>}
                       </div>
+                      {hotel.sourceUrl ? <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Tinyfish live · Giá tham khảo</div> : null}
                       <div className="mt-1 text-slate-500">{hotel.area} · {hotel.distanceKm} km · ★ {hotel.rating}</div>
                       <div className="mt-1 text-slate-500">{hotel.refundable ? "Có hoàn huỷ" : "Không hoàn huỷ"}</div>
-                      <div className="mt-2 font-semibold text-[#13253d]">{formatMoney(hotel.pricePerNight)} VND/đêm</div>
+                      {hotel.summary ? <div className="mt-1 line-clamp-3 text-slate-500">{hotel.summary}</div> : null}
+                      <div className="mt-2 font-semibold text-[#13253d]">{hotel.pricePerNight ? `${formatMoney(hotel.pricePerNight)} VND/đêm` : "Đang lấy thông tin từ internet..."}</div>
                     </button>
                   );
                 })}

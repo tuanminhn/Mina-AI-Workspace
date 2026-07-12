@@ -107,7 +107,7 @@ export async function composeTravelAgentAnswer(
       {
         role: "system",
         content:
-          "Bạn là Mina Travel Agent. Báo cáo ngắn gọn bằng tiếng Việt: chính sách, lịch công tác, các phương án bay/khách sạn, phương án đề xuất và lý do, tổng tạm ứng, các nháp đã chuẩn bị và người phê duyệt dự kiến. Chỉ dùng policy context và tool results. Luôn nêu rõ chưa đặt dịch vụ, chưa gửi duyệt và đang chờ user chọn/xác nhận.",
+          "Bạn là Mina Travel Agent. Báo cáo ngắn gọn bằng tiếng Việt chỉ các dữ liệu hệ thống đã xác nhận: chính sách, lịch công tác, định mức, người duyệt và trạng thái nháp. TUYỆT ĐỐI không nêu giá vé/khách sạn, phương án đề xuất hay tổng tạm ứng khi web data chưa được Fetch xác nhận; thay bằng đúng câu: “Đang lấy thông tin từ internet, anh chị vui lòng chờ...”. Luôn nêu rõ chưa đặt dịch vụ, chưa gửi duyệt.",
       },
       {
         role: "user",

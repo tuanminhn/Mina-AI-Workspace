@@ -3,6 +3,7 @@ import { propagateAttributes, startActiveObservation } from "@langfuse/tracing";
 import { citationsFromHits, composeAnswer, composeLeaveAgentAnswer, composeTravelAgentAnswer } from "@/lib/answer";
 import { appendAuditLog, getUser } from "@/lib/data";
 import { searchKnowledge } from "@/lib/search";
+import { searchLiveTravelOptions, type LiveTravelSearch } from "@/lib/tinyfish";
 import {
   attendanceByStaff,
   calculateTravelAllowance,
@@ -98,24 +99,71 @@ export async function POST(request: Request) {
       answer = "Em chưa thể tạo nháp vì không tìm thấy chính sách công tác mà user hiện tại được phép truy cập.";
     } else {
       const allowance = calculateTravelAllowance(destination, period);
-      const flightOptions = searchFlightOptions(period);
-      const hotelOptions = searchHotelOptions(period, allowance.hotelPerNight);
-      const recommendation = recommendTravelOptions(flightOptions, hotelOptions);
+      let flightOptions = searchFlightOptions(period);
+      let hotelOptions = searchHotelOptions(period, allowance.hotelPerNight);
+      let liveSearch: LiveTravelSearch = { provider: "demo", status: "unavailable", message: "Using demo options." };
+      try {
+        liveSearch = await startActiveObservation("tinyfish.travel_search", async (tinyfishSpan) => {
+          tinyfishSpan.update({ input: { destination, fromDate: period.fromDate, toDate: period.toDate } });
+          const result = await searchLiveTravelOptions(destination, period);
+          tinyfishSpan.update({ output: { provider: result.provider, status: result.status, sourceCount: result.sources?.length || 0 } });
+          return result;
+        }, { asType: "tool" });
+      } catch (error) {
+        liveSearch = { provider: "demo", status: "failed", message: error instanceof Error ? `Tinyfish live search unavailable: ${error.message}` : "Tinyfish live search unavailable; using demo options." };
+      }
+      if (liveSearch.status === "live" && liveSearch.sources?.length) {
+        const liveFlights = liveSearch.sources.filter((source) => source.kind === "flight").slice(0, 3);
+        const liveHotels = liveSearch.sources.filter((source) => source.kind === "hotel").slice(0, 3);
+        if (liveFlights.length) {
+          flightOptions = liveFlights.map((source, index) => ({
+            id: `TF-PENDING-FL-${index + 1}`,
+            airline: source.siteName,
+            outbound: period.fromDate,
+            return: period.toDate,
+            route: "HAN ↔ DAD",
+            totalPrice: 0,
+            baggage: "Đang lấy thông tin",
+            refundable: false,
+            sourceUrl: source.url,
+            summary: source.snippet,
+          }));
+        }
+        if (liveHotels.length) {
+          hotelOptions = liveHotels.map((source, index) => ({
+            id: `TF-PENDING-HT-${index + 1}`,
+            name: source.title,
+            area: source.siteName,
+            pricePerNight: 0,
+            totalPrice: 0,
+            distanceKm: 0,
+            rating: 0,
+            refundable: false,
+            policyCompliant: true,
+            sourceUrl: source.url,
+            summary: source.snippet,
+          }));
+        }
+      }
+      const recommendation = liveSearch.status === "live"
+        ? { flightId: flightOptions[0].id, hotelId: hotelOptions[0].id, reason: "Đang lấy giá và điều kiện chi tiết từ các nguồn web. Giá chỉ được dùng sau khi Tinyfish Fetch xác nhận." }
+        : recommendTravelOptions(flightOptions, hotelOptions);
       const selectedFlight = flightOptions.find((item) => item.id === recommendation.flightId) || flightOptions[0];
       const selectedHotel = hotelOptions.find((item) => item.id === recommendation.hotelId) || hotelOptions[0];
       const drafts = createTravelDraftBundle(traveler, period, allowance, selectedFlight, selectedHotel);
       const money = new Intl.NumberFormat("vi-VN").format(drafts.advanceRequest.amount);
-      const fallbackAnswer = `Đã tìm và đề xuất phương án công tác cho ${traveler.staffName}:\n1. Lịch ${period.fromDate} đến ${period.toDate}: ${period.calendarDays} ngày, ${period.nights} đêm.\n2. Đề xuất ${selectedFlight.airline} (${new Intl.NumberFormat("vi-VN").format(selectedFlight.totalPrice)} VND) và ${selectedHotel.name} (${new Intl.NumberFormat("vi-VN").format(selectedHotel.pricePerNight)} VND/đêm), đúng định mức DOC003.\n3. Tổng tạm ứng dự kiến gồm vé, khách sạn và phụ cấp: ${money} VND.\n4. Đã chuẩn bị bộ nháp booking, công tác và tạm ứng theo phương án đề xuất. Chưa đặt dịch vụ/chưa gửi duyệt; đang chờ user chọn và xác nhận.`;
+      const fallbackAnswer = `Đã kiểm tra dữ liệu hệ thống cho ${traveler.staffName}:\n1. Lịch công tác: ${period.fromDate} đến ${period.toDate} (${period.calendarDays} ngày, ${period.nights} đêm).\n2. Chính sách áp dụng: DOC003; định mức khách sạn ${new Intl.NumberFormat("vi-VN").format(allowance.hotelPerNight)} VND/đêm và phụ cấp ăn uống ${new Intl.NumberFormat("vi-VN").format(allowance.mealPerDay)} VND/ngày.\n3. Tuyến duyệt dự kiến: ${drafts.approver.staffName} — ${drafts.approver.title}.\n4. Đang lấy thông tin từ internet, anh chị vui lòng chờ... Giá vé/khách sạn và tổng tạm ứng sẽ được điền vào bộ nháp ngay khi Tinyfish Fetch xác nhận.\n5. Chưa đặt dịch vụ và chưa gửi duyệt.`;
       const agentResult = {
         name: toolIntent,
         status: "completed",
         traveler,
         period,
         allowance,
+        liveSearch,
         flightOptions,
         hotelOptions,
         recommendation,
-        travelDrafts: { ...drafts, flightOptions, hotelOptions, recommendation },
+        travelDrafts: { ...drafts, flightOptions, hotelOptions, recommendation, liveSearch },
         fallbackAnswer,
         plan: [
           "Tra cứu chính sách công tác theo quyền truy cập.",
@@ -126,8 +174,8 @@ export async function POST(request: Request) {
         decisions: [
           { label: "Policy & access", summary: `Dùng DOC003 làm căn cứ: ${policyHit.reason}` },
           { label: "Trip calculation", summary: `${period.calendarDays} ngày, ${period.nights} đêm tại ${destination}; áp dụng định mức thành phố lớn.` },
-          { label: "Advance scope", summary: `Tạm ứng ${money} VND gồm vé máy bay, khách sạn và ăn uống; chưa tính di chuyển nội thành.` },
-          { label: "Recommended option", summary: `${selectedFlight.airline} + ${selectedHotel.name}. ${recommendation.reason}` },
+          { label: "Advance scope", summary: "Đang chờ Tinyfish Fetch xác nhận giá vé và khách sạn trước khi tính tổng tạm ứng." },
+          { label: "Recommended option", summary: recommendation.reason },
           { label: "Approval routing", summary: `Tuyến duyệt dự kiến: ${drafts.approver.staffName} — ${drafts.approver.title}.` },
         ],
         approval: {
@@ -138,10 +186,11 @@ export async function POST(request: Request) {
         steps: [
           { name: "knowledge.search_travel_policy", status: "completed", summary: `Đã đọc DOC003 theo ACL: ${policyHit.reason}` },
           { name: "staff.resolve_traveler", status: "completed", summary: `${traveler.staffName} — ${traveler.department}.` },
-          { name: "travel.calculate_allowance", status: "completed", summary: `${period.calendarDays} ngày/${period.nights} đêm; tạm ứng ${money} VND.` },
-          { name: "flight.search", status: "completed", summary: `Tìm thấy ${flightOptions.length} phương án chuyến bay.` },
-          { name: "hotel.search", status: "completed", summary: `Tìm thấy ${hotelOptions.length} khách sạn; ${hotelOptions.filter((item) => item.policyCompliant).length} đúng định mức.` },
-          { name: "travel.compare_options", status: "completed", summary: `Đề xuất ${selectedFlight.airline} + ${selectedHotel.name}.` },
+          { name: "travel.calculate_allowance", status: "completed", summary: `${period.calendarDays} ngày/${period.nights} đêm; đã áp dụng định mức chính sách.` },
+          { name: "tinyfish.travel_search", status: liveSearch.status === "live" ? "completed" : "skipped", summary: liveSearch.message },
+          { name: "flight.search", status: "completed", summary: `Tìm thấy ${flightOptions.length} phương án chuyến bay (${liveSearch.status === "live" ? "live" : "demo"}).` },
+          { name: "hotel.search", status: "completed", summary: `Tìm thấy ${hotelOptions.length} khách sạn; ${hotelOptions.filter((item) => item.policyCompliant).length} đúng định mức (${liveSearch.status === "live" ? "live" : "demo"}).` },
+          { name: "travel.compare_options", status: "completed", summary: "Đang chờ giá thực tế để so sánh và đề xuất phương án." },
           { name: "booking.create_draft", status: "completed", summary: `Đã chuẩn bị ${drafts.bookingRequest.id}; chưa đặt dịch vụ.` },
           { name: "travel.create_draft", status: "completed", summary: `Đã tạo ${drafts.travelRequest.id}.` },
           { name: "advance.create_draft", status: "completed", summary: `Đã tạo ${drafts.advanceRequest.id}, liên kết ${drafts.travelRequest.id}.` },
