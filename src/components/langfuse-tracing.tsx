@@ -69,13 +69,8 @@ export default function LangfuseTracing() {
           <div className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-violet-600" />
             <h2 className="text-lg font-semibold text-[#13253d]">Langfuse Tracing</h2>
-            <span className={`rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
-              result?.source === "langfuse" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
-            }`}>
-              {result?.source === "langfuse" ? "Live data" : "Demo data"}
-            </span>
           </div>
-          <p className="mt-1 text-sm text-slate-500">Quan sát từng bước xử lý query, tool call, độ trễ và chi phí model.</p>
+          <p className="mt-1 text-sm text-slate-500">Inspect each query step, tool call, latency, and model cost.</p>
         </div>
         <button type="button" onClick={load} disabled={loading} className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />

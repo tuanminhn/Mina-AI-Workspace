@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { observeOpenAI } from "@langfuse/openai";
 import type { Citation, SearchHit, User } from "./types";
 
 function extractSnippet(content: string) {
@@ -31,7 +32,7 @@ export function fallbackAnswer(question: string, hits: SearchHit[]) {
 export async function composeAnswer(question: string, user: User, hits: SearchHit[]) {
   if (!process.env.OPENAI_API_KEY) return fallbackAnswer(question, hits);
 
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const client = observeOpenAI(new OpenAI({ apiKey: process.env.OPENAI_API_KEY }));
   const context = hits
     .slice(0, 5)
     .map(
@@ -68,7 +69,7 @@ export async function composeLeaveAgentAnswer(
   const fallback = String(result.fallbackAnswer || "Đã hoàn tất luồng xử lý nghỉ phép.");
   if (!process.env.OPENAI_API_KEY) return fallback;
 
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const client = observeOpenAI(new OpenAI({ apiKey: process.env.OPENAI_API_KEY }));
   const policyContext = hits.slice(0, 3).map((hit) => `[${hit.document_id}] ${hit.content}`).join("\n\n");
   const response = await client.chat.completions.create({
     model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
@@ -97,7 +98,7 @@ export async function composeTravelAgentAnswer(
   const fallback = String(result.fallbackAnswer || "Đã hoàn tất luồng chuẩn bị công tác và tạm ứng.");
   if (!process.env.OPENAI_API_KEY) return fallback;
 
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const client = observeOpenAI(new OpenAI({ apiKey: process.env.OPENAI_API_KEY }));
   const policyContext = hits.slice(0, 3).map((hit) => `[${hit.document_id}] ${hit.content}`).join("\n\n");
   const response = await client.chat.completions.create({
     model: process.env.OPENAI_MODEL || "gpt-4.1-mini",

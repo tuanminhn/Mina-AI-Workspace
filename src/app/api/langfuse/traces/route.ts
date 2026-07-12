@@ -19,7 +19,7 @@ type Observation = {
 export async function GET() {
   const publicKey = process.env.LANGFUSE_PUBLIC_KEY;
   const secretKey = process.env.LANGFUSE_SECRET_KEY;
-  const host = (process.env.LANGFUSE_HOST || "https://us.cloud.langfuse.com").replace(/\/$/, "");
+  const host = (process.env.LANGFUSE_BASE_URL || process.env.LANGFUSE_HOST || "https://us.cloud.langfuse.com").replace(/\/$/, "");
   const projectId = process.env.LANGFUSE_PROJECT_ID;
 
   if (!publicKey || !secretKey) return NextResponse.json({ data: demoRows(), source: "demo", configured: false });

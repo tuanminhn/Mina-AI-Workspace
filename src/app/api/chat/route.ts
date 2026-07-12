@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { propagateAttributes, startActiveObservation } from "@langfuse/tracing";
 import { citationsFromHits, composeAnswer, composeLeaveAgentAnswer, composeTravelAgentAnswer } from "@/lib/answer";
 import { appendAuditLog, getUser } from "@/lib/data";
 import { searchKnowledge } from "@/lib/search";
@@ -32,13 +33,34 @@ export async function POST(request: Request) {
   }
 
   const toolIntent = detectToolIntent(question);
+  return propagateAttributes(
+    {
+      traceName: "mina-workspace-chat-turn",
+      userId: user.user_id,
+      metadata: {
+        department: user.department,
+        role: user.role,
+        intent: toolIntent || "knowledge.rag",
+      },
+      tags: ["mina-workspace", toolIntent ? "agent" : "rag"],
+    },
+    () => startActiveObservation("mina-workspace-chat-turn", async (chatSpan) => {
+      chatSpan.update({ input: { question } });
   let toolResult = null;
   let answer = "";
-  const retrieved = toolIntent === "leave.agent"
-    ? searchKnowledge("chính sách nghỉ phép số ngày nghỉ phép năm", user, 8)
-    : toolIntent === "travel.agent"
-      ? searchKnowledge("chính sách công tác khách sạn phụ cấp ăn uống phê duyệt", user, 8)
-    : toolIntent ? [] : searchKnowledge(question, user, 8);
+  const retrieved = await startActiveObservation("knowledge.retrieve", async (retrievalSpan) => {
+    const searchQuery = toolIntent === "leave.agent"
+      ? "chính sách nghỉ phép số ngày nghỉ phép năm"
+      : toolIntent === "travel.agent"
+        ? "chính sách công tác khách sạn phụ cấp ăn uống phê duyệt"
+        : question;
+    const results = toolIntent ? (toolIntent === "leave.agent" || toolIntent === "travel.agent" ? searchKnowledge(searchQuery, user, 8) : []) : searchKnowledge(searchQuery, user, 8);
+    retrievalSpan.update({
+      input: { query: searchQuery },
+      output: results.map((hit) => ({ documentId: hit.document_id, allowed: hit.allowed, score: hit.score })),
+    });
+    return results;
+  }, { asType: "retriever" });
   const authorized = retrieved.filter((hit) => hit.allowed);
   let answerSources = authorized;
   const topHit = retrieved[0];
@@ -269,5 +291,15 @@ export async function POST(request: Request) {
     latencyMs: response.latencyMs,
   });
 
+  chatSpan.update({
+    output: {
+      intent: response.intent,
+      answer,
+      citationDocumentIds: citations.map((item) => item.document_id),
+      latencyMs: response.latencyMs,
+    },
+  });
   return NextResponse.json(response);
+    }),
+  );
 }

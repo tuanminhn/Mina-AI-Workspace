@@ -326,21 +326,18 @@ export default function Home() {
               >
                 <Activity className="h-4 w-4" />
                 <span className="hidden sm:inline">Langfuse Tracing</span>
-                <span className={`hidden rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide sm:inline ${
-                  activeTab === "tracing" ? "bg-white/15 text-white" : "bg-violet-100 text-violet-700"
-                }`}>Demo</span>
               </button>
             </nav>
             <details className="group relative shrink-0">
               <summary
                 className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border border-slate-200 bg-white text-[#315f9a] shadow-sm transition hover:border-[#75a9eb] hover:bg-[#edf5ff] focus:outline-none focus:ring-2 focus:ring-[#8bb6f0] [&::-webkit-details-marker]:hidden"
-                aria-label="Thông tin hệ thống"
-                title="Thông tin hệ thống"
+                aria-label="System information"
+                title="System information"
               >
                 <Info className="h-4.5 w-4.5" />
               </summary>
               <div className="absolute right-0 z-30 mt-2 w-72 rounded-md border border-slate-200 bg-white p-3 shadow-lg">
-                <div className="mb-2 text-sm font-semibold text-[#13253d]">Thông tin hệ thống</div>
+                <div className="mb-2 text-sm font-semibold text-[#13253d]">System information</div>
                 <dl className="divide-y divide-slate-100 text-sm">
                   <InfoRow label="Version" value={APP_VERSION} />
                   <InfoRow label="Documents" value="40" />
@@ -502,13 +499,13 @@ export default function Home() {
               title="Acting as"
               icon={<UserRound className="h-4 w-4" />}
               className="order-1"
-              description="Danh sách user hiện được fix cứng từ fake API để phục vụ demo phân quyền. Hệ thống chưa đấu nối với danh bạ nhân sự hoặc môi trường thật."
+              description="This user list is fixed from a mock API for access-control demonstrations. It is not connected to a live employee directory or production environment."
             >
               <select
                 id="user"
                 value={selectedUserId}
                 onChange={(event) => setSelectedUserId(event.target.value)}
-                className="w-full rounded-md border border-slate-250 bg-white px-3 py-2 text-sm outline-none ring-[#8bb6f0] focus:ring-2"
+                className="w-full rounded-md border border-slate-250 bg-white px-3 py-2 pr-11 text-[13px] outline-none ring-[#8bb6f0] focus:ring-2"
               >
                 {users.map((user) => (
                   <option key={user.user_id} value={user.user_id}>
@@ -534,7 +531,7 @@ export default function Home() {
             <Panel
               title="Agent Trace"
               icon={<Bot className="h-4 w-4" />}
-              description="Các bước Mina đã thực thi cho yêu cầu nhiều tác vụ. Tool nghiệp vụ tạo nháp nhưng không tự gửi đơn."
+              description="Steps Mina completed for multi-step requests. Business tools create drafts only and never submit requests automatically."
               defaultCollapsed
               className="order-2"
               expandedSignal={latestAgentResult?.name?.endsWith(".agent") ? latestAssistant?.id : undefined}
@@ -612,11 +609,11 @@ export default function Home() {
               description={
                 <>
                   <p>
-                    Các tài liệu nguồn được cấp quyền và dùng làm context cho lượt trả lời mới nhất.
-                    Mỗi nguồn hiển thị mã tài liệu, mức phân loại, phòng ban sở hữu và đoạn trích liên quan.
+                    Authorized source documents used as context for the latest response.
+                    Each source shows its document ID, classification, owning department, and relevant excerpt.
                   </p>
                   <p className="mt-2">
-                    Tài liệu bị ACL từ chối sẽ không xuất hiện tại đây và không được gửi nội dung cho LLM.
+                    Documents denied by ACL are not listed here and their content is never sent to the LLM.
                   </p>
                 </>
               }
@@ -650,12 +647,12 @@ export default function Home() {
               description={
                 <>
                   <p>
-                    Dấu vết kiểm quyền của các kết quả retrieval. <strong>Allow</strong> là nguồn user được
-                    phép xem; <strong>Deny</strong> là nguồn bị chặn theo role, department hoặc classification.
+                    Authorization trace for retrieval results. <strong>Allow</strong> means the user may access the source;
+                    <strong>Deny</strong> means it is blocked by role, department, or classification.
                   </p>
                   <p className="mt-2">
-                    <strong>Score</strong> thể hiện độ liên quan với câu hỏi, không phải mức độ bảo mật.
-                    Dòng cuối giải thích chính xác lý do hệ thống Allow hoặc Deny tài liệu đó.
+                    <strong>Score</strong> measures relevance to the question, not security level.
+                    The final line explains exactly why each document is allowed or denied.
                   </p>
                 </>
               }
@@ -1060,9 +1057,9 @@ function Panel({
               type="button"
               onClick={() => setShowDescription((current) => !current)}
               className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-[#315f9a] focus:outline-none focus:ring-2 focus:ring-[#8bb6f0]"
-              aria-label={`${showDescription ? "Đóng" : "Mở"} giải thích ${title}`}
+              aria-label={`${showDescription ? "Close" : "Open"} explanation for ${title}`}
               aria-expanded={showDescription}
-              title={`Giải thích ${title}`}
+              title={`Explanation for ${title}`}
             >
               <Info className="h-4 w-4" />
             </button>
@@ -1071,9 +1068,9 @@ function Panel({
               type="button"
               onClick={() => setIsCollapsed((current) => !current)}
               className="flex h-7 w-7 items-center justify-center rounded-md text-[#315f9a] transition hover:bg-[#edf5ff] focus:outline-none focus:ring-2 focus:ring-[#8bb6f0]"
-              aria-label={`${isCollapsed ? "Mở rộng" : "Thu gọn"} ${title}`}
+              aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${title}`}
               aria-expanded={!isCollapsed}
-              title={isCollapsed ? "Mở rộng" : "Thu gọn"}
+              title={isCollapsed ? "Expand" : "Collapse"}
             >
               <ChevronDown className={`h-4 w-4 transition-transform ${isCollapsed ? "" : "rotate-180"}`} />
             </button>

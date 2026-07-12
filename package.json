@@ -10,6 +10,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@langfuse/openai": "^5.9.1",
+    "@langfuse/otel": "^5.9.1",
+    "@langfuse/tracing": "^5.9.1",
+    "@opentelemetry/sdk-node": "^0.220.0",
     "lucide-react": "^1.24.0",
     "next": "16.2.10",
     "openai": "^6.46.0",
